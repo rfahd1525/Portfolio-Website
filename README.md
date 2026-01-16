@@ -38,7 +38,7 @@ Then visit `http://localhost:8000`
 - Email: rfahd15@gmail.com
 - GitHub: [@rfahd1525](https://github.com/rfahd1525)
 - LinkedIn: [Rawad Fahd](https://www.linkedin.com/in/rawad-fahd-03b326196)
-- Portfolio: [rawaddahd.com](https://www.rawadfahd.com)
+- Portfolio: [rawadfahd.com](https://rawadfahd.com)
 
 ## License
 
