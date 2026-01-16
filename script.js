@@ -79,7 +79,7 @@ if (heroVisual && orbContainer) {
 }
 
 // ===== Typing Effect =====
-const phrases = ['Full-Stack Developer', 'AI Enthusiast', 'Problem Solver', 'Creative Coder', 'Tech Explorer'];
+const phrases = ['Full-Stack Developer', 'AI Enthusiast', 'Problem Solver', 'Software Developer', 'CS Student @ Western'];
 let pi = 0, ci = 0, del = false;
 (function type() {
     const p = phrases[pi];
