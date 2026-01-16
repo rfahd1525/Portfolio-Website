@@ -4,7 +4,7 @@ Personal portfolio showcasing my work as a Computer Science student at Western U
 
 ## Features
 
-- **Modern Design** - Dark theme with cyberpunk-inspired aesthetics, custom cursor, and floating particles
+- **Modern Design** - Dark theme, custom cursor, and floating particles
 - **Interactive Rubik's Cube** - Fully functional 3D Rubik's Cube with rotation controls and scramble functionality
 - **Responsive Layout** - Works on desktop and mobile devices
 - **Smooth Animations** - Typing effects, scroll reveals, and tilt effects on project cards
@@ -38,6 +38,7 @@ Then visit `http://localhost:8000`
 - Email: rfahd15@gmail.com
 - GitHub: [@rfahd1525](https://github.com/rfahd1525)
 - LinkedIn: [Rawad Fahd](https://www.linkedin.com/in/rawad-fahd-03b326196)
+- Portfolio: [rawaddahd.com](https://www.rawadfahd.com)
 
 ## License
 
