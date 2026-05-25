@@ -224,10 +224,10 @@ if (statsSec) statsObs.observe(statsSec);
 
 // ===== Project Card Tilt =====
 projectCards.forEach(c => {
-    c.addEventListener('mousemove', throttle(e => {
+    c.addEventListener('mousemove', e => {
         const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
         c.style.transform = `perspective(1000px) rotateX(${(y - r.height / 2) / 20}deg) rotateY(${(r.width / 2 - x) / 20}deg) translateY(-10px)`;
-    }, 16), { passive: true });
+    }, { passive: true });
     c.addEventListener('mouseleave', () => c.style.transform = '', { passive: true });
 });
 
