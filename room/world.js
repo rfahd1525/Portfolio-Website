@@ -62,6 +62,50 @@ export function buildWorld(scene) {
         return s;
     };
 
+    // Little particle bursts: hearts for the cat, confetti for secrets.
+    const heartMap = tex.heartTexture();
+    const confettiGeo = new THREE.PlaneGeometry(0.018, 0.03);
+    const confettiColors = ['#ffd84d', '#3553e8', '#d94660', '#86d3c8', '#ffffff', '#b9a8ff'];
+    const bursts = [];
+    world.burst = (pos, kind, count = 30) => {
+        for (let i = 0; i < count; i++) {
+            const hearts = kind === 'hearts';
+            const obj = hearts
+                ? new THREE.Sprite(new THREE.SpriteMaterial({ map: heartMap, transparent: true, depthWrite: false }))
+                : new THREE.Mesh(confettiGeo, new THREE.MeshBasicMaterial({ color: confettiColors[i % confettiColors.length], side: THREE.DoubleSide, transparent: true }));
+            obj.position.copy(pos);
+            if (hearts) obj.scale.setScalar(0.045 + Math.random() * 0.025);
+            root.add(noInk(obj));
+            const r = () => Math.random() * 2 - 1;
+            bursts.push({
+                obj, hearts, age: 0,
+                life: hearts ? 1.4 + Math.random() * 0.5 : 2.4,
+                vel: hearts ? V(r() * 0.08, 0.22 + Math.random() * 0.12, r() * 0.08) : V(r() * 1.1, 1.4 + Math.random() * 1.2, r() * 1.1),
+                spin: V(r() * 8, r() * 8, r() * 8)
+            });
+        }
+    };
+    world.updaters.push((dt) => {
+        for (let i = bursts.length - 1; i >= 0; i--) {
+            const b = bursts[i];
+            b.age += dt;
+            if (!b.hearts) {
+                b.vel.y -= 3.2 * dt;
+                b.vel.multiplyScalar(1 - dt * 0.8);
+                b.obj.rotation.x += b.spin.x * dt;
+                b.obj.rotation.y += b.spin.y * dt;
+            }
+            b.obj.position.addScaledVector(b.vel, dt);
+            if (b.obj.position.y < 0.01) { b.obj.position.y = 0.01; b.vel.set(0, 0, 0); }
+            b.obj.material.opacity = Math.min(1, (b.life - b.age) * 2);
+            if (b.age >= b.life) {
+                root.remove(b.obj);
+                b.obj.material.dispose();
+                bursts.splice(i, 1);
+            }
+        }
+    });
+
     buildShell(root, world, register, interact);
     buildWindow(root, world, register, interact);
     buildDesk(root, world, register, interact, glowSprite);
@@ -120,8 +164,9 @@ function buildShell(root, world, register, interact) {
     const trim = toon(C.trim);
     const band = (y, h, inset, mat) => {
         add(root, box(5.56, h, inset), mat, 0, y, -2.33 + inset / 2);
-        add(root, box(inset, h, 4.66), mat, -2.78 + inset / 2, y, 0);
-        add(root, box(inset, h, 4.66), mat, 2.78 - inset / 2, y, 0);
+        add(root, box(inset, h, 4.66 - 2 * inset), mat, -2.78 + inset / 2, y, 0);
+        add(root, box(inset, h, 4.66 - 2 * inset), mat, 2.78 - inset / 2, y, 0);
+        // Front wall, either side of the door; the ends tuck inside the door frame.
         add(root, box(3.93, h, inset), mat, -0.815, y, 2.33 - inset / 2);
         add(root, box(0.73, h, inset), mat, 2.415, y, 2.33 - inset / 2);
     };
@@ -130,15 +175,16 @@ function buildShell(root, world, register, interact) {
     band(0.05, 0.1, 0.05, trim);
     // Crown moulding
     add(root, box(5.56, 0.06, 0.05), trim, 0, 2.92, -2.305);
-    add(root, box(0.05, 0.06, 4.66), trim, -2.755, 2.92, 0);
-    add(root, box(0.05, 0.06, 4.66), trim, 2.755, 2.92, 0);
+    add(root, box(0.05, 0.06, 4.56), trim, -2.755, 2.92, 0);
+    add(root, box(0.05, 0.06, 4.56), trim, 2.755, 2.92, 0);
     add(root, box(5.56, 0.06, 0.05), trim, 0, 2.92, 2.305);
 
     // Door (click it to leave)
     const door = register(group(root, 'door', 1.6, 0, 2.33), 'door');
-    add(door, box(0.08, 2.14, 0.22), trim, -0.49, 1.07, 0);
-    add(door, box(0.08, 2.14, 0.22), trim, 0.49, 1.07, 0);
-    add(door, box(1.06, 0.08, 0.22), trim, 0, 2.12, 0);
+    // Frame sits 1.2 cm inside the opening (0.9 x 2.08) so nothing is coplanar with the wall.
+    add(door, box(0.08, 2.068, 0.22), trim, -0.478, 1.034, 0);
+    add(door, box(0.08, 2.068, 0.22), trim, 0.478, 1.034, 0);
+    add(door, box(1.036, 0.08, 0.22), trim, 0, 2.108, 0);
     const slab = group(door, 'doorSlab', -0.44, 0, 0.06);
     const doorMat = toon('#f1e4d4');
     add(slab, box(0.88, 2.06, 0.045), doorMat, 0.44, 1.03, 0);
@@ -151,8 +197,11 @@ function buildShell(root, world, register, interact) {
     sign.rotation.y = Math.PI;
     slab.add(noInk(sign));
     interact(door, { id: 'door', label: 'door', hint: 'back to the 2D site' });
-    // Light switch
-    add(root, box(0.08, 0.12, 0.015), toon('#ffffff'), 0.95, 1.2, 2.322);
+    // Light switch for the ceiling light
+    const sw = register(group(root, 'switch', 0.95, 1.2, 2.322), 'switch');
+    add(sw, box(0.08, 0.12, 0.015), toon('#ffffff'), 0, 0, 0);
+    world.switchToggle = add(sw, box(0.022, 0.045, 0.014), toon('#e2dcef'), 0, 0, -0.012);
+    interact(sw, { id: 'switch', label: 'light switch', hint: 'ceiling light' });
 
     // Ceiling light + glow-in-the-dark stars
     const lightBase = add(root, new THREE.CylinderGeometry(0.28, 0.3, 0.06, 24), toon('#ffffff'), 0, 2.92, 0, { cast: false });
@@ -161,6 +210,10 @@ function buildShell(root, world, register, interact) {
     diffuser.position.set(0, 2.888, 0);
     root.add(noInk(diffuser));
     world.ceilingLight = diffuser;
+    world.ceilingGlow = noInk(new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.glowTexture(), color: '#fff4dc', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
+    world.ceilingGlow.position.set(0, 2.86, 0);
+    world.ceilingGlow.scale.setScalar(1.6);
+    root.add(world.ceilingGlow);
 
     const starShape = new THREE.Shape();
     for (let i = 0; i < 10; i++) {
@@ -186,12 +239,14 @@ function buildWindow(root, world, register, interact) {
     const frameMat = toon(C.trim);
     const win = group(root, 'window', 0.2, 1.7, -2.41);
     const W = 1.3, H = 1.1, T = 0.07, D = 0.24;
-    add(win, box(W + T * 2, T, D), frameMat, 0, H / 2 + T / 2, 0);
-    add(win, box(W + T * 2, T, D), frameMat, 0, -H / 2 - T / 2, 0);
-    add(win, box(T, H, D), frameMat, -W / 2 - T / 2, 0, 0);
-    add(win, box(T, H, D), frameMat, W / 2 + T / 2, 0, 0);
-    add(win, box(0.035, H, 0.06), frameMat, 0, 0, 0);
-    add(win, box(W, 0.035, 0.06), frameMat, 0, 0.12, 0);
+    // The frame sits 1.2 cm inside the hole so its faces never share a plane with the wall's.
+    const e = 0.012, iw = W / 2 - e, ih = H / 2 - e;
+    add(win, box(2 * (iw + T), T, D), frameMat, 0, ih + T / 2, 0);
+    add(win, box(2 * (iw + T), T, D), frameMat, 0, -ih - T / 2, 0);
+    add(win, box(T, 2 * ih, D), frameMat, -iw - T / 2, 0, 0);
+    add(win, box(T, 2 * ih, D), frameMat, iw + T / 2, 0, 0);
+    add(win, box(0.035, 2 * ih, 0.06), frameMat, 0, 0, 0);
+    add(win, box(2 * iw, 0.035, 0.05), frameMat, 0, 0.12, 0);
     const sill = add(win, box(W + 0.3, 0.04, 0.3), frameMat, 0, -H / 2 - 0.07, 0.14);
     sill.name = 'sill';
 
@@ -281,7 +336,7 @@ function buildDesk(root, world, register, interact, glowSprite) {
     });
     add(desk, box(0.05, 0.72, 0.05), white, 0.82, 0.36, 0.28);
     add(desk, box(0.05, 0.72, 0.05), white, 0.82, 0.36, -0.28);
-    add(desk, box(0.05, 0.05, 0.6), white, 0.82, 0.08, 0);
+    add(desk, box(0.04, 0.04, 0.6), white, 0.82, 0.08, 0);
 
     // Monitor
     const monitor = register(group(desk, 'monitor', 0, 0.77, -0.1), 'monitor');
@@ -320,6 +375,7 @@ function buildDesk(root, world, register, interact, glowSprite) {
 
     // Mug with steam
     const mug = register(group(desk, 'mug', 0.62, 0.77, 0.24), 'mug');
+    interact(mug, { id: 'mug', label: 'mug', hint: 'take a sip' });
     add(mug, new THREE.CylinderGeometry(0.042, 0.038, 0.1, 14), toon('#ffd25e'), 0, 0.05, 0);
     add(mug, new THREE.TorusGeometry(0.026, 0.008, 6, 12, Math.PI), toon('#ffd25e'), 0.045, 0.05, 0).rotation.z = -Math.PI / 2;
     add(mug, new THREE.CircleGeometry(0.036, 14).rotateX(-Math.PI / 2), toon('#6b3e2a'), 0, 0.092, 0, { cast: false });
@@ -330,12 +386,18 @@ function buildDesk(root, world, register, interact, glowSprite) {
         mug.add(noInk(s));
         return s;
     });
+    const sip = { t: 0 };
+    world.mug = { poke() { sip.t = 1.2; } };
     world.updaters.push((dt, t) => {
+        sip.t = Math.max(0, sip.t - dt);
+        const lift = Math.sin(Math.min(1, sip.t / 1.2) * Math.PI);
+        mug.position.y = 0.77 + lift * 0.08;
+        mug.rotation.z = lift * 0.5;
         puffs.forEach(s => {
             const p = (t * 0.35 + s.userData.phase) % 1;
             s.position.set(Math.sin(p * 6 + s.userData.phase * 4) * 0.015, 0.11 + p * 0.22, 0);
             s.scale.setScalar(0.04 + p * 0.07);
-            s.material.opacity = Math.sin(p * Math.PI) * 0.35;
+            s.material.opacity = Math.sin(p * Math.PI) * (0.35 + lift * 0.4);
         });
     });
 
@@ -611,7 +673,7 @@ function buildBedAndCat(root, world, register, interact) {
     const bed = register(group(root, 'bed', -2.13, 0, 1.2), 'bed');
     const wood = toon('#d9a27a');
     add(bed, box(1.12, 0.26, 2.06), wood, 0, 0.15, 0);
-    add(bed, box(1.12, 0.78, 0.08), wood, 0, 0.39, -1.02);
+    add(bed, box(1.14, 0.78, 0.08), wood, 0, 0.39, -1.02);
     add(bed, rbox(1.04, 0.17, 1.98, 0.05), toon('#fffaf3'), 0, 0.36, 0.01);
     const blanket = add(bed, rbox(1.08, 0.07, 1.35, 0.03), toon('#ffffff', { map: tex.blanketTexture() }), 0, 0.46, 0.33);
     blanket.name = 'blanket';
@@ -619,8 +681,10 @@ function buildBedAndCat(root, world, register, interact) {
 
     const cat = register(group(bed, 'cat', 0.08, 0.5, 0.5), 'cat');
     cat.rotation.y = -0.6;
-    const fur = toon('#f2a65a');
-    const furLight = toon('#ffe2c2');
+    // Snowy
+    const fur = toon('#f7f4f2');
+    const furLight = toon('#ffffff');
+    const earPink = toon('#ffc4d2');
     const torso = add(cat, flat(new THREE.SphereGeometry(1, 10, 7)), fur, 0, 0.06, 0);
     torso.scale.set(0.17, 0.085, 0.12);
     const head = group(cat, 'catHead', 0.15, 0.07, 0.04);
@@ -629,6 +693,10 @@ function buildBedAndCat(root, world, register, interact) {
     const earL = add(head, flat(new THREE.ConeGeometry(0.026, 0.05, 4)), fur, 0.0, 0.06, -0.035);
     const earR = add(head, flat(new THREE.ConeGeometry(0.026, 0.05, 4)), fur, 0.0, 0.06, 0.035);
     earL.rotation.x = -0.35; earR.rotation.x = 0.35;
+    [[-0.035, -0.35], [0.035, 0.35]].forEach(([z, rx]) => {
+        const inner = add(head, flat(new THREE.ConeGeometry(0.014, 0.03, 4)), earPink, 0.008, 0.058, z * 0.95);
+        inner.rotation.x = rx;
+    });
     const lidMat = toon(C.ink);
     [-0.028, 0.028].forEach(z => {
         const lid = add(head, new THREE.TorusGeometry(0.012, 0.0028, 4, 8, Math.PI), lidMat, 0.062, 0.008, z);
@@ -647,8 +715,15 @@ function buildBedAndCat(root, world, register, interact) {
         return s;
     });
 
-    const state = { awake: 0 };
-    world.cat = { poke() { state.awake = 2.2; } };
+    const state = { awake: 0, pets: 0 };
+    world.cat = {
+        // Returns how many times he's been petted this visit.
+        poke() {
+            state.awake = 2.2;
+            world.burst(cat.localToWorld(V(0.16, 0.18, 0.04)), 'hearts', 5);
+            return ++state.pets;
+        }
+    };
     world.updaters.push((dt, t) => {
         torso.scale.y = 0.085 + Math.sin(t * 1.6) * 0.004;
         tail.rotation.y = Math.sin(t * 0.8) * 0.08;
@@ -670,7 +745,8 @@ function buildBedAndCat(root, world, register, interact) {
             s.material.opacity = state.awake > 0 ? 0 : Math.sin(p * Math.PI);
         });
     });
-    interact(cat, { id: 'cat', label: 'cat', hint: 'pet' });
+    interact(cat, { id: 'cat', label: 'snowy', hint: 'pet him' });
+    interact(bed, { id: 'bed', label: 'bed', hint: 'take a nap' });
 }
 
 // ---------------------------------------------------------------- decor
@@ -690,8 +766,17 @@ function buildDecor(root, world, register, interact, glowSprite) {
         g.rotation.z = rz;
         return register(g, `poster-${kind}`);
     };
-    poster('hello', 1.6, 1.62, 0.5, 0.7, -0.03);
-    poster('blocks', -1.15, 1.72, 0.44, 0.62, 0.025);
+    const wobbles = [];
+    [poster('hello', 1.6, 1.62, 0.5, 0.7, -0.03), poster('blocks', -1.15, 1.72, 0.44, 0.62, 0.025)].forEach(p => {
+        const w = { obj: p, base: p.rotation.z, t: 0 };
+        wobbles.push(w);
+        interact(p, { id: 'poster', label: 'poster', hint: 'straighten it' });
+    });
+    world.wobble = obj => { const w = wobbles.find(x => x.obj === obj); if (w) w.t = 1.6; };
+    world.updaters.push(dt => wobbles.forEach(w => {
+        w.t = Math.max(0, w.t - dt);
+        w.obj.rotation.z = w.base * (w.t > 0 ? 1 : 1) + Math.sin(w.t * 14) * 0.08 * w.t;
+    }));
 
     // Rug
     const rugMat = toon('#e98fb2');
@@ -704,6 +789,7 @@ function buildDecor(root, world, register, interact, glowSprite) {
     const leafA = toon('#5fb57a');
     const leafB = toon('#3f9a6a');
     const stem = toon('#4a8a5a');
+    const stems = [];
     for (let i = 0; i < 9; i++) {
         const a = i / 9 * Math.PI * 2 + (i % 2) * 0.3;
         const tilt = 0.35 + (i % 3) * 0.18;
@@ -716,7 +802,19 @@ function buildDecor(root, world, register, interact, glowSprite) {
         const leaf = add(s, flat(new THREE.SphereGeometry(1, 6, 4)), i % 2 ? leafA : leafB, 0, len + 0.05, 0);
         leaf.scale.set(0.12, 0.17, 0.035);
         leaf.rotation.y = a;
+        stems.push({ s, rx: s.rotation.x, rz: s.rotation.z, phase: i });
     }
+    const wiggle = { t: 0 };
+    world.plant = { poke() { wiggle.t = 1.5; } };
+    world.updaters.push((dt, t) => {
+        wiggle.t = Math.max(0, wiggle.t - dt);
+        stems.forEach(st => {
+            const k = Math.sin(t * 12 + st.phase) * 0.12 * wiggle.t + Math.sin(t * 0.9 + st.phase) * 0.015;
+            st.s.rotation.x = st.rx + k;
+            st.s.rotation.z = st.rz + k * 0.7;
+        });
+    });
+    interact(plant, { id: 'plant', label: 'plant', hint: 'water it' });
 
     // Low cabinet with a record player under the poster
     const cab = register(group(root, 'cabinet', 1.85, 0, -2.05), 'cabinet');
@@ -726,13 +824,21 @@ function buildDecor(root, world, register, interact, glowSprite) {
     add(cab, box(0.43, 0.38, 0.02), toon('#b9b0e6'), 0.225, 0.27, 0.245);
     [-0.06, 0.06].forEach(x => add(cab, box(0.02, 0.1, 0.02), toon(C.plum), x, 0.3, 0.26));
     [-0.4, 0.4].forEach(x => add(cab, new THREE.CylinderGeometry(0.02, 0.015, 0.04, 6), toon(C.plum), x, 0.02, 0.18));
-    const deck = group(cab, 'turntable', -0.15, 0.56, 0.02);
+    const deck = register(group(cab, 'turntable', -0.15, 0.56, 0.02), 'turntable');
     add(deck, box(0.42, 0.07, 0.34), toon('#7a4a3a'), 0, 0.035, 0);
     const platter = add(deck, new THREE.CylinderGeometry(0.14, 0.14, 0.012, 24), toon('#1f1a2e'), -0.04, 0.076, 0);
     add(platter, new THREE.CylinderGeometry(0.05, 0.05, 0.003, 16), toon(C.accent), 0, 0.007, 0);
-    const arm = add(deck, box(0.012, 0.012, 0.2), toon('#d9d4e6'), 0.15, 0.09, 0.02);
-    arm.rotation.y = 0.35;
-    world.updaters.push(dt => { platter.rotation.y -= dt * 3.5; });
+    const armPivot = group(deck, 'tonearm', 0.16, 0.09, -0.1);
+    add(armPivot, new THREE.CylinderGeometry(0.018, 0.018, 0.03, 10), toon('#d9d4e6'), 0, -0.005, 0);
+    add(armPivot, box(0.012, 0.012, 0.2), toon('#d9d4e6'), 0, 0, 0.1);
+    world.turntable = { playing: false };
+    world.updaters.push(dt => {
+        const playing = world.turntable.playing;
+        if (playing) platter.rotation.y -= dt * 3.5;
+        // Arm swings over the record while it plays.
+        armPivot.rotation.y += ((playing ? -0.45 : 0.2) - armPivot.rotation.y) * Math.min(1, dt * 4);
+    });
+    interact(deck, { id: 'music', label: 'record player', hint: 'play some music' });
     // Records leaning against the cabinet
     ['#d94660', '#4ab0c8', '#ffd25e'].forEach((col, i) => {
         const r = add(cab, box(0.31, 0.31, 0.012), toon(col), 0.22 + i * 0.04, 0.72, -0.12 + i * 0.03);
@@ -751,21 +857,89 @@ function buildDecor(root, world, register, interact, glowSprite) {
     bagGeo.computeVertexNormals();
     const bean = add(bag, bagGeo, toon('#86d3c8'), 0, 0.16, 0);
     bean.rotation.y = 2.6;
+    const squish = { t: 0 };
+    world.beanbag = { poke() { squish.t = 1; } };
+    world.updaters.push(dt => {
+        squish.t = Math.max(0, squish.t - dt * 1.4);
+        const k = Math.sin(squish.t * Math.PI * 3) * squish.t * 0.18;
+        bean.scale.set(1 + k * 0.6, 1 - k, 1 + k * 0.6);
+    });
+    interact(bag, { id: 'beanbag', label: 'beanbag', hint: 'flop onto it' });
     const manga = group(bag, 'manga', 0.42, 0, 0.18);
     ['#ffffff', '#d94660', '#4ab0c8', '#ffffff'].forEach((col, i) => {
         const m = add(manga, box(0.13, 0.025, 0.19), [toon('#fff6e6'), toon(col), toon(col), toon(col), toon('#fff6e6'), toon(col)], 0, 0.0125 + i * 0.025, 0);
         m.rotation.y = (i % 2 ? 0.2 : -0.1) + i * 0.05;
     });
 
-    // Wardrobe on the right wall
+    // Wardrobe on the right wall. It opens (there's someone inside), and there's
+    // something shiny on top if you look up.
     const wardrobe = register(group(root, 'wardrobe', 2.5, 0, -0.75), 'wardrobe');
     const wood = toon('#f3e6d6');
-    add(wardrobe, box(0.54, 2.02, 1.04), wood, 0, 1.03, 0);
-    add(wardrobe, box(0.02, 1.86, 0.5), toon('#e8d7c2'), -0.275, 1.06, -0.255);
-    add(wardrobe, box(0.02, 1.86, 0.5), toon('#e8d7c2'), -0.275, 1.06, 0.255);
-    [-0.04, 0.04].forEach(z => add(wardrobe, box(0.025, 0.22, 0.025), toon(C.plum), -0.295, 1.1, z));
-    add(wardrobe, box(0.36, 0.22, 0.4), toon('#c9a27a'), 0.02, 2.15, 0.2);
-    add(wardrobe, box(0.3, 0.16, 0.34), toon('#b9b0e6'), 0.0, 2.12, -0.22).rotation.y = 0.2;
+    const inside = toon('#d8c4ae');
+    add(wardrobe, box(0.02, 2.02, 1.04), inside, 0.26, 1.03, 0);
+    add(wardrobe, box(0.54, 0.03, 1.04), wood, 0, 2.025, 0);
+    add(wardrobe, box(0.54, 0.08, 1.04), wood, 0, 0.06, 0);
+    add(wardrobe, box(0.54, 2.02, 0.03), wood, 0, 1.03, -0.505);
+    add(wardrobe, box(0.54, 2.02, 0.03), wood, 0, 1.03, 0.505);
+    add(wardrobe, box(0.5, 0.025, 0.98), inside, 0.01, 1.92, 0);
+    add(wardrobe, new THREE.CylinderGeometry(0.012, 0.012, 0.96, 8).rotateX(Math.PI / 2), toon('#c9c4d6'), 0.04, 1.78, 0);
+    [['#d94660', -0.28], ['#3553e8', 0.02], ['#86d3c8', 0.3]].forEach(([col, z]) => {
+        const hoodie = group(wardrobe, 'hoodie', 0.04, 1.78, z);
+        add(hoodie, new THREE.TorusGeometry(0.03, 0.005, 4, 10, Math.PI).rotateY(Math.PI / 2), toon('#c9c4d6'), 0, 0.01, 0);
+        add(hoodie, rbox(0.09, 0.5, 0.3, 0.03), toon(col), 0, -0.3, 0);
+        add(hoodie, rbox(0.08, 0.12, 0.14, 0.04), toon(col), 0.02, -0.04, 0);
+        hoodie.rotation.x = z * 0.15;
+    });
+    // The ghost (a nod to Steal a Ghost)
+    const ghost = group(wardrobe, 'ghost', 0.0, 0.7, -0.1);
+    add(ghost, new THREE.CapsuleGeometry(0.11, 0.14, 6, 14), toon('#fbfaff'), 0, 0, 0);
+    [[0.07, -0.045], [0.07, 0.045]].forEach(([y, z]) => add(ghost, new THREE.SphereGeometry(0.018, 8, 6), toon(C.ink), -0.1, y, z));
+    [-0.075, 0.075].forEach(z => add(ghost, new THREE.SphereGeometry(0.016, 8, 6), toon('#ffb3c7'), -0.098, 0.03, z));
+    ghost.scale.setScalar(0.001);
+    // Doors on hinges at the outer edges.
+    const doorMat = toon('#e8d7c2');
+    const knob = toon(C.plum);
+    const leftDoor = group(wardrobe, 'doorL', -0.28, 1.04, -0.52);
+    add(leftDoor, box(0.02, 1.92, 0.515), doorMat, 0, 0, 0.2575);
+    add(leftDoor, box(0.025, 0.22, 0.025), knob, -0.02, 0.06, 0.47);
+    const rightDoor = group(wardrobe, 'doorR', -0.28, 1.04, 0.52);
+    add(rightDoor, box(0.02, 1.92, 0.515), doorMat, 0, 0, -0.2575);
+    add(rightDoor, box(0.025, 0.22, 0.025), knob, -0.02, 0.06, -0.47);
+    // Boxes on top, plus the trophy.
+    add(wardrobe, box(0.36, 0.22, 0.4), toon('#c9a27a'), 0.02, 2.15, 0.25);
+    add(wardrobe, box(0.3, 0.16, 0.3), toon('#b9b0e6'), 0.02, 2.12, -0.32).rotation.y = 0.15;
+    const trophy = register(group(wardrobe, 'trophy', -0.1, 2.04, -0.05), 'trophy');
+    const gold = toon('#ffd84d');
+    add(trophy, box(0.09, 0.03, 0.09), toon('#8a6a2a'), 0, 0.015, 0);
+    add(trophy, new THREE.CylinderGeometry(0.012, 0.02, 0.05, 8), gold, 0, 0.055, 0);
+    const cup = [[0, 0], [0.025, 0], [0.05, 0.03], [0.055, 0.08], [0.05, 0.08]].map(([x, y]) => new THREE.Vector2(x, y));
+    add(trophy, new THREE.LatheGeometry(cup, 14), toon('#ffd84d', { side: THREE.DoubleSide }), 0, 0.08, 0);
+    [-1, 1].forEach(sz => add(trophy, new THREE.TorusGeometry(0.022, 0.006, 6, 10, Math.PI), gold, 0, 0.13, sz * 0.055).rotation.set(0, 0, -Math.PI / 2));
+    const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.glowTexture(), color: '#fff3b0', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    sparkle.position.set(0, 0.14, 0);
+    trophy.add(noInk(sparkle));
+
+    const wstate = { open: false, k: 0, trophy: 0 };
+    world.wardrobe = {
+        toggle() { wstate.open = !wstate.open; return wstate.open; },
+        trophy() { wstate.trophy = 1; world.burst(trophy.localToWorld(V(0, 0.15, 0)), 'confetti', 60); }
+    };
+    world.updaters.push((dt, t) => {
+        wstate.k += ((wstate.open ? 1 : 0) - wstate.k) * Math.min(1, dt * 5);
+        leftDoor.rotation.y = -1.75 * wstate.k;
+        rightDoor.rotation.y = 1.75 * wstate.k;
+        // The ghost pops out a moment after the doors open.
+        const g = Math.max(0, (wstate.k - 0.5) * 2);
+        ghost.scale.setScalar(Math.max(0.001, g));
+        ghost.position.set(-0.05 - g * 0.35, 0.7 + g * 0.25 + Math.sin(t * 3) * 0.03 * g, -0.1);
+        ghost.rotation.z = Math.sin(t * 2) * 0.1 * g;
+        sparkle.scale.setScalar(0.08 + Math.max(0, Math.sin(t * 2.2)) * 0.12);
+        wstate.trophy = Math.max(0, wstate.trophy - dt);
+        trophy.rotation.y = wstate.trophy * Math.PI * 4;
+        trophy.position.y = 2.04 + Math.sin(wstate.trophy * Math.PI) * 0.12;
+    });
+    interact(wardrobe, { id: 'wardrobe', label: 'wardrobe', hint: 'open it' });
+    interact(trophy, { id: 'trophy', label: '???', hint: 'shiny' });
 
     // Pennant and a poster on the right wall
     const pennant = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.28), toon('#ffffff', { map: tex.pennantTexture(), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide }));
@@ -792,6 +966,7 @@ function buildDecor(root, world, register, interact, glowSprite) {
     const tvScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.96, 0.54), new THREE.MeshBasicMaterial({ map: tex.tvTexture() }));
     tvScreen.position.set(0, 0.42, 0.0055);
     tv.add(noInk(tvScreen));
+    world.tvScreen = tvScreen;
     // Console + controller
     add(media, box(0.3, 0.06, 0.22), toon('#f8f1e8'), 0.5, 0.5, -0.02);
     add(media, box(0.3, 0.008, 0.005), toon('#86d3c8'), 0.5, 0.5, 0.0905);
@@ -799,6 +974,7 @@ function buildDecor(root, world, register, interact, glowSprite) {
     pad.rotation.y = 0.4;
     add(pad, rbox(0.15, 0.03, 0.08, 0.012), toon('#3a3150'), 0, 0.015, 0);
     [-0.05, 0.05].forEach(x => add(pad, new THREE.CylinderGeometry(0.012, 0.012, 0.012, 8), toon('#86d3c8'), x, 0.035, 0.0));
+    interact(media, { id: 'arcade', label: 'game console', hint: 'play something' });
 
     // Calendar by the door
     const cal = group(root, 'calendar', 0.45, 1.5, 2.322);
@@ -806,8 +982,10 @@ function buildDecor(root, world, register, interact, glowSprite) {
     add(cal, box(0.32, 0.4, 0.008), [toon('#ffffff'), toon('#ffffff'), toon('#ffffff'), toon('#ffffff'), toon('#ffffff', { map: tex.calendarTexture() }), toon('#ffffff')], 0, 0, 0, { cast: false });
     add(cal, new THREE.SphereGeometry(0.012, 8, 6), toon(C.plum), 0, 0.22, 0.01);
     register(cal, 'calendar');
+    interact(cal, { id: 'calendar', label: 'calendar', hint: "what's today?" });
 
-    // Fairy lights along the top of both walls
+    // Fairy lights along the top of both walls (click to change colours)
+    const fairy = register(group(root, 'fairylights'), 'fairylights');
     const wire = toon('#3a3150');
     const bulbs = [];
     const string = (from, to, count, sag) => {
@@ -819,18 +997,32 @@ function buildDecor(root, world, register, interact, glowSprite) {
             pts.push(p);
         }
         const curve = new THREE.CatmullRomCurve3(pts);
-        add(root, new THREE.TubeGeometry(curve, count * 4, 0.004, 4), wire, 0, 0, 0, { cast: false });
+        add(fairy, new THREE.TubeGeometry(curve, count * 4, 0.004, 4), wire, 0, 0, 0, { cast: false });
         pts.forEach((p, i) => {
             if (i === 0 || i === count) return;
             const col = ['#ffd68a', '#ffb3c7', '#9fe0ff'][i % 3];
-            const m = add(root, new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: col }), p.x, p.y - 0.02, p.z, { cast: false });
-            const g = glowSprite(col, 0.22, root, p.x, p.y - 0.02, p.z + 0.02, 0.7);
+            const m = add(fairy, new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: col }), p.x, p.y - 0.02, p.z, { cast: false });
+            const g = glowSprite(col, 0.22, fairy, p.x, p.y - 0.02, p.z + 0.02, 0.7);
             bulbs.push({ m, g, phase: i * 1.7 });
         });
     };
     string(V(-2.65, 2.62, -2.27), V(2.6, 2.62, -2.27), 24, 0.12);
     string(V(-2.7, 2.62, -2.2), V(-2.7, 2.62, 2.2), 18, 0.12);
     world.fairy = bulbs;
+    const palettes = [['#ffd68a', '#ffb3c7', '#9fe0ff'], ['#ff5d8f', '#ffd84d', '#5df2c4', '#7d8bff'], ['#ffffff', '#dfe8ff'], ['#c9a2ff', '#8ea0ff']];
+    let palette = 0;
+    const paint = (cols) => bulbs.forEach((b, i) => {
+        const c = cols[i % cols.length];
+        b.m.material.color.set(c);
+        b.g.material.color.set(c);
+    });
+    world.lightsColour = {
+        next() { palette = (palette + 1) % palettes.length; paint(palettes[palette]); },
+        // Disco: every bulb cycles through the rainbow.
+        disco(t) { bulbs.forEach((b, i) => { b.m.material.color.setHSL((t * 0.5 + i * 0.07) % 1, 0.9, 0.65); b.g.material.color.copy(b.m.material.color); }); },
+        reset() { paint(palettes[palette]); }
+    };
+    interact(fairy, { id: 'fairy', label: 'fairy lights', hint: 'change colour' });
     world.updaters.push((dt, t) => {
         bulbs.forEach(b => {
             const k = 0.55 + 0.45 * Math.sin(t * 2 + b.phase);
@@ -872,11 +1064,15 @@ function buildLights(scene, world) {
     monitor.position.set(0.2, 1.05, -1.6);
     scene.add(monitor);
 
+    const ceiling = new THREE.PointLight('#fff1dc', 0, 7, 1.4);
+    ceiling.position.set(0, 2.7, 0);
+    scene.add(ceiling);
+
     const fairy = new THREE.PointLight('#ffc89a', 0.0, 4, 1.5);
     fairy.position.set(-1.2, 2.3, -1.2);
     scene.add(fairy);
 
-    world.lights = { hemi, sun, fill, lamp, monitor, fairy };
+    world.lights = { hemi, sun, fill, lamp, monitor, fairy, ceiling };
 }
 
 function buildDust(root, world, glow) {

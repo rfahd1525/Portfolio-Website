@@ -289,7 +289,7 @@ export function corkTexture() {
     note(830, 200, 300, 250, 0.04, '#9fd8ff', ['roblox dev', 'w/ Pseudoname', 'Games'], 36);
     note(810, 540, 300, 250, -0.03, '#c7f0a8', ['into AI/ML', '+ game dev'], 38);
 
-    // Polaroid with a doodle cat
+    // Polaroid of Snowy
     ctx.save();
     ctx.translate(500, 590);
     ctx.rotate(0.07);
@@ -297,20 +297,23 @@ export function corkTexture() {
     ctx.fillRect(-120, -110, 250, 250);
     ctx.fillStyle = '#fffdf6';
     ctx.fillRect(-130, -120, 250, 240);
-    ctx.fillStyle = '#ffcf9e';
+    ctx.fillStyle = '#9fb8ee';
     ctx.fillRect(-112, -102, 214, 160);
-    ctx.fillStyle = '#f2a65a';
-    ctx.beginPath(); ctx.ellipse(-5, 20, 60, 34, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(-50, -12, 30, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-74, -30); ctx.lineTo(-70, -62); ctx.lineTo(-52, -40); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-44, -40); ctx.lineTo(-30, -62); ctx.lineTo(-26, -30); ctx.fill();
-    ctx.strokeStyle = INK; ctx.lineWidth = 4;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    const blob = (f) => { ctx.beginPath(); f(); ctx.fill(); ctx.stroke(); };
+    blob(() => ctx.ellipse(-5, 20, 60, 34, 0, 0, Math.PI * 2));
+    blob(() => ctx.arc(-50, -12, 30, 0, Math.PI * 2));
+    blob(() => { ctx.moveTo(-74, -30); ctx.lineTo(-70, -62); ctx.lineTo(-52, -40); ctx.closePath(); });
+    blob(() => { ctx.moveTo(-44, -40); ctx.lineTo(-30, -62); ctx.lineTo(-26, -30); ctx.closePath(); });
+    ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(-60, -12, 6, 0.2, Math.PI - 0.2); ctx.stroke();
     ctx.beginPath(); ctx.arc(-38, -12, 6, 0.2, Math.PI - 0.2); ctx.stroke();
     ctx.fillStyle = INK;
     ctx.font = `28px ${MONO}`;
     ctx.textAlign = 'center';
-    ctx.fillText('zzz', -5, 100);
+    ctx.fillText('snowy', -5, 100);
     ctx.restore();
     return texture(c);
 }
@@ -483,6 +486,22 @@ export function tvTexture() {
     ctx.fillText('1 PLAYER   2 PLAYERS', 256, 160);
     ctx.fillStyle = 'rgba(0,0,0,0.12)';
     for (let y = 0; y < 288; y += 4) ctx.fillRect(0, y, 512, 2);
+    return texture(c);
+}
+
+export function heartTexture() {
+    const [c, ctx] = canvas(64, 64);
+    ctx.fillStyle = '#ff6b9a';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(32, 54);
+    ctx.bezierCurveTo(4, 36, 6, 10, 22, 10);
+    ctx.bezierCurveTo(28, 10, 32, 15, 32, 20);
+    ctx.bezierCurveTo(32, 15, 36, 10, 42, 10);
+    ctx.bezierCurveTo(58, 10, 60, 36, 32, 54);
+    ctx.fill();
+    ctx.stroke();
     return texture(c);
 }
 
