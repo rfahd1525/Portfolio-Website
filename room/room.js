@@ -291,6 +291,7 @@ export async function mountRoom(host, { onExit } = {}) {
         fp.joy.set(0, 0);
         unlock();
         state.mode = 'travel';
+        if (state.focus === 'arcade' && key !== 'arcade') arcade.sleep();
         state.focus = key;
         updateHud();
         openPanel(panel, panelArg);
@@ -327,7 +328,7 @@ export async function mountRoom(host, { onExit } = {}) {
             <ul class="rp-games">
                 ${rb.games.map(g => `
                 <li>
-                    <img src="${esc(g.img || '')}" alt="" width="64" height="64" loading="lazy">
+                    ${g.img ? `<img src="${esc(g.img)}" alt="" width="64" height="64" loading="lazy">` : '<span class="rp-noicon"></span>'}
                     <div>
                         <h3>${esc(g.name)} <span>${formatCount(g.visits)} visits</span></h3>
                         <p>${esc(g.blurb)}</p>
@@ -581,11 +582,13 @@ export async function mountRoom(host, { onExit } = {}) {
             if (state.mode === 'walk' && state.target) act(state.target.userData.interactive, state.target);
             return;
         }
-        drag = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false };
+        if (drag) return;   // one finger at a time
+        drag = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, moved: false };
         if (touch || state.lockFailed) canvas.setPointerCapture?.(e.pointerId);
     });
     canvas.addEventListener('pointermove', e => {
         if (state.locked) return;
+        if (drag && e.pointerId !== drag.id) return;
         setPointer(e);
         if (!drag) return;
         if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 6) drag.moved = true;
@@ -596,10 +599,11 @@ export async function mountRoom(host, { onExit } = {}) {
         drag.lx = e.clientX;
         drag.ly = e.clientY;
     });
-    canvas.addEventListener('pointercancel', () => { drag = null; });
+    canvas.addEventListener('pointercancel', e => { if (drag && e.pointerId === drag.id) drag = null; });
     canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !state.locked) state.pointer.set(-9, -9); });
     canvas.addEventListener('pointerup', e => {
         if (state.locked) return;
+        if (drag && e.pointerId !== drag.id) return;
         const wasDrag = !drag || drag.moved;
         drag = null;
         if (wasDrag || state.mode === 'intro' || state.mode === 'travel') return;
@@ -698,9 +702,15 @@ export async function mountRoom(host, { onExit } = {}) {
     const onScreen = o => frustum.intersectsObject(o);
 
     // Watch frame times; if the device struggles, drop the resolution a notch.
-    const perf = { acc: 0, frames: 0, settle: 2 };
+    // A drop is only kept if the next stretch of frames actually gets faster:
+    // when the frame rate is capped (iOS Low Power Mode, Chrome Energy Saver)
+    // a lower resolution buys nothing, so we put it back and stop adapting.
+    const perf = {};
+    const resetPerf = () => Object.assign(perf, { acc: 0, frames: 0, settle: 2, pending: null, done: false });
+    const setRatio = r => { pixelRatio = r; renderer.setPixelRatio(r); resize(); };
     const adaptResolution = (dt) => {
-        if (state.mode !== 'walk' || pixelRatio <= minRatio) return;
+        if (state.mode !== 'walk' || perf.done) return;
+        if (!perf.pending && pixelRatio <= minRatio) return;
         if ((perf.settle -= dt) > 0) return;
         perf.acc += dt;
         perf.frames++;
@@ -708,13 +718,18 @@ export async function mountRoom(host, { onExit } = {}) {
         const avg = perf.acc / perf.frames;
         perf.acc = 0;
         perf.frames = 0;
-        if (avg > 1 / 40) {
-            pixelRatio = Math.max(minRatio, pixelRatio - 0.25);
-            renderer.setPixelRatio(pixelRatio);
-            resize();
+        if (perf.pending) {
+            const { ratio, avg: before } = perf.pending;
+            perf.pending = null;
+            if (avg > before * 0.9) { setRatio(ratio); perf.done = true; return; }
+        }
+        if (avg > 1 / 40 && pixelRatio > minRatio) {
+            perf.pending = { ratio: pixelRatio, avg };
+            setRatio(Math.max(minRatio, pixelRatio - 0.25));
             perf.settle = 1.5;
         }
     };
+    resetPerf();
 
     const frame = (now) => {
         raf = requestAnimationFrame(frame);
@@ -849,8 +864,13 @@ export async function mountRoom(host, { onExit } = {}) {
 
     // Compile every shader now, while the transition still covers the screen,
     // so walking in doesn't stutter. One offscreen frame builds the outline pass too.
-    if (renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
-    else renderer.compile(scene, camera);
+    // (Bound to the colour target so the programs match the ones it draws with.)
+    renderer.setRenderTarget(ink.colorTarget);
+    const compiling = renderer.extensions.has('KHR_parallel_shader_compile')
+        ? renderer.compileAsync(scene, camera)
+        : (renderer.compile(scene, camera), null);
+    renderer.setRenderTarget(null);
+    if (compiling) await compiling;
     resize();
     camera.position.set(START.x, EYE, START.z);
     camera.lookAt(START.x, EYE, START.z - 1);
@@ -866,6 +886,8 @@ export async function mountRoom(host, { onExit } = {}) {
             resize();
             timer.reset();
 
+            if (pixelRatio !== maxRatio) setRatio(maxRatio);
+            resetPerf();
             fp.pos.set(START.x, 0, START.z);
             fp.yaw = START.yaw;
             fp.pitch = START.pitch;
