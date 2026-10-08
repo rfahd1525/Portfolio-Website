@@ -35,7 +35,7 @@ The project list lives in two places: `index.html` for the 2D page and `room/dat
 - **Desktop:** click once to capture the mouse, then the mouse looks around, WASD / arrow keys walk (Shift to go faster), and click or **E** uses whatever the crosshair is on. Esc gives the cursor back.
 - **Phones:** left joystick walks, swipe to look, tap things.
 - The computer and the books on the shelf open the project list, the Roblox figure on the desk shows the games, the corkboard is the about section, the phone is contact, and the door goes back to the 2D site.
-- The TV console has four small games (Snake, Pong, Bricks, Ghost Flap) in `room/arcade.js`. The record player plays a lo-fi loop synthesised in `room/music.js`. Most other things react when clicked, and there are six secrets (listed in `SECRETS` in `room/room.js`).
+- The TV console has four small games (Snake, Pong, Bricks, Ghost Flap) in `room/arcade.js`. The record player plays a lo-fi loop synthesised in `room/music.js`. Most other things react when clicked, and a few things are hidden.
 - Built with three.js 0.185.1 from jsDelivr (pinned in the import map in `index.html`).
 
 ## Roblox data
@@ -68,7 +68,7 @@ Everything in the room is generated in code, but any piece can be swapped for a 
 }
 ```
 
-- `replace` hides one of the built-in objects and puts your model where it was. It also keeps that object's click behaviour. Names you can replace: `desk`, `chair`, `monitor`, `keyboard`, `lamp`, `mug`, `phone`, `bookstack`, `rubiks`, `roblox`, `shelf`, `bed`, `cat`, `plant`, `corkboard`, `cabinet`, `beanbag`, `wardrobe`, `console`, `door`, `calendar`, `pennant`, `poster-hello`, `poster-blocks`, `poster-engine`.
+- `replace` hides one of the built-in objects and puts your model where it was. It also keeps that object's click behaviour. Names you can replace: `desk`, `chair`, `monitor`, `keyboard`, `lamp`, `mug`, `phone`, `bookstack`, `rubiks`, `roblox`, `shelf`, `bed`, `cat`, `plant`, `corkboard`, `cabinet`, `wardrobe`, `console`, `door`, `calendar`, `pennant`, `poster-hello`, `poster-blocks`, `poster-engine`.
 - `position` (metres) and `rotation` (degrees) override the placement. Without `replace`, the model goes in at `position`.
 - Materials are converted to the same cel shading as the rest of the room. Set `"toon": false` to keep the originals.
 - Keep files small (a couple of MB at most). Low-poly models with flat colours fit the look best.

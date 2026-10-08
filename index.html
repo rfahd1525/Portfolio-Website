@@ -13,6 +13,7 @@
     <meta name="theme-color" content="#f4efe4">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=JetBrains+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400;500;700&display=swap"
         rel="stylesheet">
@@ -24,7 +25,7 @@
     <script type="importmap">
     {
         "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+            "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js",
             "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
         }
     }
@@ -70,7 +71,8 @@
 
             <figure class="room-card">
                 <button class="room-card-shot" type="button" data-enter-room aria-label="Enter the 3D room">
-                    <img src="assets/room-preview.webp" width="1200" height="750"
+                    <img src="assets/room-preview.jpg" srcset="assets/room-preview-800.jpg 800w, assets/room-preview.jpg 1200w"
+                        sizes="(max-width: 960px) 92vw, 46vw" width="1200" height="750" fetchpriority="high" decoding="async"
                         alt="Cel-shaded 3D bedroom at sunset: a desk with a monitor, a small Roblox figure, a bookshelf and fairy lights.">
                     <span class="room-card-cta">Enter the room &rarr;</span>
                 </button>
@@ -113,10 +115,10 @@
                         <span class="p-desc">
                             <span data-roblox-summary>The Roblox games I make. 4 out so far with 46k visits between them, and 1,267 members in the community.</span>
                             <span class="p-games" aria-hidden="true" data-roblox-icons>
-                                <img src="assets/games/10084260628.webp" alt="" width="28" height="28" loading="lazy">
-                                <img src="assets/games/10768484463.webp" alt="" width="28" height="28" loading="lazy">
-                                <img src="assets/games/10769094310.webp" alt="" width="28" height="28" loading="lazy">
-                                <img src="assets/games/10768202465.webp" alt="" width="28" height="28" loading="lazy">
+                                <img src="assets/games/10084260628.jpg" alt="" width="28" height="28" loading="lazy">
+                                <img src="assets/games/10768484463.jpg" alt="" width="28" height="28" loading="lazy">
+                                <img src="assets/games/10769094310.jpg" alt="" width="28" height="28" loading="lazy">
+                                <img src="assets/games/10768202465.jpg" alt="" width="28" height="28" loading="lazy">
                             </span>
                         </span>
                         <span class="p-stack">Luau &middot; Roblox Studio</span>

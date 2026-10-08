@@ -177,6 +177,19 @@ h1, h2, h3 { margin: 0; font-weight: 400; }
 [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
 
+/* Theme switch: halftone wipe (drawn by script.js) and a spin on the icon */
+.theme-wipe {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2000;
+    pointer-events: none;
+}
+
+.theme-toggle svg { transition: transform 0.9s cubic-bezier(0.6, 0, 0.2, 1); }
+.theme-toggle.is-turning svg { transform: rotate(360deg) scale(0.8); }
+
 /* ---------------------------------------------------------------- layout */
 
 main > section {
@@ -637,8 +650,10 @@ body.in-room { overflow: hidden; }
     left: 50%;
     bottom: 28px;
     z-index: 1100;
-    max-width: calc(100% - 32px);
+    width: max-content;
+    max-width: min(520px, calc(100% - 32px));
     padding: 10px 16px;
+    text-align: center;
     background: var(--card);
     color: var(--ink);
     border: 2px solid var(--ink);

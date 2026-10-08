@@ -17,7 +17,7 @@ const BOUNDS = { minX: -2.78, maxX: 2.78, minZ: -2.33, maxZ: 2.33 };
 const START = { x: 0.95, z: 1.9, yaw: 0.19, pitch: -0.13 };
 
 // Furniture you bump into (bounding boxes are measured at runtime).
-const SOLID = ['desk', 'chair', 'bed', 'cabinet', 'beanbag', 'plant', 'wardrobe', 'console'];
+const SOLID = ['desk', 'chair', 'bed', 'cabinet', 'plant', 'wardrobe', 'console'];
 
 // Where the camera goes for things that open a panel.
 const FOCUS = {
@@ -29,15 +29,6 @@ const FOCUS = {
     arcade: { position: V(-0.75, 1.02, 1.22), target: V(-0.75, 0.89, 2.15) }
 };
 
-// Easter eggs. Found ones are remembered in localStorage.
-const SECRETS = {
-    ghost: 'someone lives in the wardrobe',
-    trophy: 'the trophy on top of the wardrobe',
-    nap: 'power nap',
-    snowy: "Snowy's new favourite person",
-    disco: 'disco mode',
-    arcade: 'score 10 in any arcade game'
-};
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
 const CAT_LINES = ['mrrp?', 'purrr', '*slow blink*', 'mrow!', 'purrrrrr'];
 const FOCUS_FOV = 50;
@@ -77,7 +68,10 @@ export async function mountRoom(host, { onExit } = {}) {
         throw new Error('WebGL is not available', { cause: err });
     }
     const touch = matchMedia('(pointer: coarse)').matches;
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2);
+    // Resolution: capped by device, and lowered automatically if frames are slow.
+    const maxRatio = Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2);
+    const minRatio = touch ? 0.75 : 1;
+    let pixelRatio = maxRatio;
     renderer.setPixelRatio(pixelRatio);
     renderer.setClearColor('#1b1530', 1);
     renderer.shadowMap.enabled = true;
@@ -94,11 +88,11 @@ export async function mountRoom(host, { onExit } = {}) {
 
     const world = buildWorld(scene);
     if (touch) world.lights.sun.shadow.mapSize.set(1024, 1024);
-    const ink = new InkRenderer(renderer, scene, camera);
+    const ink = new InkRenderer(renderer, scene, camera, { samples: touch || maxRatio >= 2 ? 2 : 4 });
     const room = scene.getObjectByName('room');
 
     // The TV shows the arcade; the record player plays the lo-fi loop.
-    const arcade = new Arcade({ onScore: (game, score) => { if (score >= 10) secret('arcade'); } });
+    const arcade = new Arcade();
     const tvTexture = new THREE.CanvasTexture(arcade.canvas);
     tvTexture.colorSpace = THREE.SRGBColorSpace;
     tvTexture.magFilter = THREE.NearestFilter;
@@ -123,8 +117,7 @@ export async function mountRoom(host, { onExit } = {}) {
         panelBody: host.querySelector('.room-panel-body'),
         toast: host.querySelector('.room-toast'),
         hint: host.querySelector('.room-hint'),
-        fade: host.querySelector('.room-fade'),
-        secrets: host.querySelector('.room-secrets')
+        fade: host.querySelector('.room-fade')
     };
     const hideHint = () => ui.hint?.classList.add('is-gone');
 
@@ -353,7 +346,6 @@ export async function mountRoom(host, { onExit } = {}) {
         arcade: () => `
             <p class="rp-kicker">console</p>
             <h2 class="rp-title">Room Arcade</h2>
-            <p>Four tiny games, playing on the TV.</p>
             <ul class="rp-arcade">
                 ${GAMES.map(g => `<li><button type="button" data-game="${g.id}">${g.name}<span>${g.help}</span></button></li>`).join('')}
             </ul>
@@ -421,30 +413,13 @@ export async function mountRoom(host, { onExit } = {}) {
         toast.t = setTimeout(() => ui.toast.classList.remove('is-on'), ms);
     };
 
-    // --------------------------------------------------------------- secrets
-
-    let found;
-    try { found = new Set(JSON.parse(localStorage.getItem('room-secrets')) || []); } catch { found = new Set(); }
-    const total = Object.keys(SECRETS).length;
-    const showSecrets = () => {
-        ui.secrets.textContent = found.size ? `secrets ${found.size}/${total}` : '';
-        ui.secrets.hidden = !found.size;
-    };
-    const secret = (id) => {
-        if (found.has(id)) return;
-        found.add(id);
-        try { localStorage.setItem('room-secrets', JSON.stringify([...found])); } catch { /* private mode */ }
-        showSecrets();
-        setTimeout(() => toast(`secret ${found.size}/${total}: ${SECRETS[id]}`, 3200), 700);
-    };
-    showSecrets();
+    // --------------------------------------------------------------- easter eggs
 
     const startDisco = () => {
         state.disco = 9;
         host.classList.add('is-disco');
         if (!music.playing) { music.start(); world.turntable.playing = true; }
         toast('disco mode');
-        secret('disco');
     };
 
     const nap = () => {
@@ -455,7 +430,6 @@ export async function mountRoom(host, { onExit } = {}) {
             state.timeK = state.time === 'night' ? 1 : 0;
             ui.fade.classList.remove('is-on');
             toast(state.time === 'night' ? 'you slept until night' : 'you slept until sunset');
-            secret('nap');
         }, 1100);
     };
 
@@ -480,8 +454,8 @@ export async function mountRoom(host, { onExit } = {}) {
             case 'cube': world.cube.twist(); break;
             case 'cat': {
                 catPets = world.cat.poke();
-                toast(CAT_LINES[(catPets - 1) % CAT_LINES.length]);
-                if (catPets === 5) secret('snowy');
+                if (catPets === 5) { world.cat.love(); toast('Snowy likes you now'); }
+                else toast(CAT_LINES[(catPets - 1) % CAT_LINES.length]);
                 break;
             }
             case 'door': unlock(); onExit?.(); break;
@@ -490,13 +464,12 @@ export async function mountRoom(host, { onExit } = {}) {
             case 'switch': state.ceilingOn = !state.ceilingOn; break;
             case 'fairy': world.lightsColour.next(); break;
             case 'wardrobe':
-                if (world.wardrobe.toggle()) setTimeout(() => { toast('boo!'); secret('ghost'); }, 600);
+                if (world.wardrobe.toggle()) setTimeout(() => toast('boo!'), 600);
                 break;
-            case 'trophy': world.wardrobe.trophy(); toast('you found it'); secret('trophy'); break;
+            case 'trophy': world.wardrobe.trophy(); toast('you found it'); break;
             case 'bed': nap(); break;
             case 'plant': world.plant.poke(); toast('watered'); break;
             case 'mug': world.mug.poke(); toast('still warm'); break;
-            case 'beanbag': world.beanbag.poke(); toast('comfy'); break;
             case 'poster': if (target) world.wobble(target); break;
             case 'calendar': toast(new Date().toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' })); break;
         }
@@ -720,6 +693,29 @@ export async function mountRoom(host, { onExit } = {}) {
         }
     };
 
+    // Is an object in front of the camera? (skip texture uploads when not)
+    const frustum = new THREE.Frustum(), projView = new THREE.Matrix4();
+    const onScreen = o => frustum.intersectsObject(o);
+
+    // Watch frame times; if the device struggles, drop the resolution a notch.
+    const perf = { acc: 0, frames: 0, settle: 2 };
+    const adaptResolution = (dt) => {
+        if (state.mode !== 'walk' || pixelRatio <= minRatio) return;
+        if ((perf.settle -= dt) > 0) return;
+        perf.acc += dt;
+        perf.frames++;
+        if (perf.frames < 90) return;
+        const avg = perf.acc / perf.frames;
+        perf.acc = 0;
+        perf.frames = 0;
+        if (avg > 1 / 40) {
+            pixelRatio = Math.max(minRatio, pixelRatio - 0.25);
+            renderer.setPixelRatio(pixelRatio);
+            resize();
+            perf.settle = 1.5;
+        }
+    };
+
     const frame = (now) => {
         raf = requestAnimationFrame(frame);
         if (document.hidden) return;
@@ -787,12 +783,15 @@ export async function mountRoom(host, { onExit } = {}) {
             b.position.x += (0.02 + want - b.position.x) * Math.min(1, dt * 8);
         });
 
-        world.screen.tick(dt);
+        projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(projView);
+        world.screen.tick(dt, onScreen(world.screenMesh));
+        adaptResolution(dt);
         world.updaters.forEach(fn => fn(dt, t));
 
         // Arcade: full speed while you're playing, a lazy attract loop otherwise.
         arcadeAcc += dt;
-        if (state.focus === 'arcade' || arcadeAcc > 0.1) {
+        if (state.focus === 'arcade' || (arcadeAcc > 0.1 && onScreen(world.tvScreen))) {
             arcade.tick(arcadeAcc);
             arcadeAcc = 0;
             tvTexture.needsUpdate = true;
@@ -848,6 +847,15 @@ export async function mountRoom(host, { onExit } = {}) {
         ink.render();
     };
 
+    // Compile every shader now, while the transition still covers the screen,
+    // so walking in doesn't stutter. One offscreen frame builds the outline pass too.
+    if (renderer.extensions.has('KHR_parallel_shader_compile')) await renderer.compileAsync(scene, camera);
+    else renderer.compile(scene, camera);
+    resize();
+    camera.position.set(START.x, EYE, START.z);
+    camera.lookAt(START.x, EYE, START.z - 1);
+    ink.render();
+
     // --------------------------------------------------------------- public
 
     return {
@@ -871,7 +879,7 @@ export async function mountRoom(host, { onExit } = {}) {
             // Arrive: a short glide in from the doorway.
             const eye = eyePos();
             const look = eye.clone().add(lookDir(fp.yaw, fp.pitch));
-            camera.position.copy(eye).add(V(0.15, 0.1, 0.32));
+            camera.position.copy(eye).add(V(-0.25, 0.1, 0.2));
             state.lookAt.copy(look).add(V(0, 0.05, 0));
             camera.fov = fp.fov + 12;
             camera.lookAt(state.lookAt);
@@ -902,7 +910,7 @@ export async function mountRoom(host, { onExit } = {}) {
         },
         // For the preview screenshot / debugging.
         debug: {
-            scene, camera, world, state, fp, act, setTime,
+            scene, camera, world, state, fp, act, setTime, renderer,
             settle() { if (state.tween) state.tween.t = 1 - 1e-6; },
             place(x, z, yaw, pitch) { fp.pos.set(x, 0, z); fp.vel.set(0, 0); fp.yaw = yaw; fp.pitch = pitch; }
         }
@@ -918,7 +926,7 @@ function hudMarkup(touch) {
         <p class="room-start-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk &middot; mouse looks &middot; click or <kbd>E</kbd> to use things &middot; <kbd>Esc</kbd> frees the cursor</p>
     </div>
     <header class="room-top">
-        <p class="room-name">rawad's room <span class="room-secrets" hidden></span></p>
+        <p class="room-name">rawad's room</p>
         <button class="room-exit" type="button">&larr; back to the 2D site</button>
     </header>
     ${touch ? '<p class="room-hint">left stick walks &middot; swipe to look &middot; tap things to open them</p>' : ''}

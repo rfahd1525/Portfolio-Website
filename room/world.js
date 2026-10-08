@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { toon, noInk } from './toon.js';
 import * as tex from './textures.js';
 import { projects } from './data.js';
@@ -62,7 +63,7 @@ export function buildWorld(scene) {
         return s;
     };
 
-    // Little particle bursts: hearts for the cat, confetti for secrets.
+    // Little particle bursts: hearts for the cat, confetti for the trophy.
     const heartMap = tex.heartTexture();
     const confettiGeo = new THREE.PlaneGeometry(0.018, 0.03);
     const confettiColors = ['#ffd84d', '#3553e8', '#d94660', '#86d3c8', '#ffffff', '#b9a8ff'];
@@ -116,7 +117,63 @@ export function buildWorld(scene) {
     buildLights(scene, world);
     buildDust(root, world, glow);
 
+    // Fewer draw calls: static parts that share a material become one mesh.
+    const parents = [root, root.getObjectByName('tv'),
+        ...['desk', 'chair', 'cabinet', 'shelf', 'window', 'wardrobe', 'console', 'bed', 'door', 'sakura', 'roblox', 'monitor', 'lamp', 'mug']
+            .map(n => world.named.get(n))].filter(Boolean);
+    const keep = new Set([...world.named.values(), world.sky.dusk, world.sky.night, world.ceilingLight,
+        world.switchToggle, world.lamp.bulb, world.tvScreen, world.screenMesh]);
+    mergeStatic(parents, keep);
+
+    // Tiny things don't need to cast shadows.
+    const sphere = new THREE.Sphere(), scale = new THREE.Vector3();
+    root.updateMatrixWorld(true);
+    root.traverse(o => {
+        if (!o.isMesh || !o.castShadow) return;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        sphere.copy(o.geometry.boundingSphere);
+        o.getWorldScale(scale);
+        if (sphere.radius * Math.max(scale.x, scale.y, scale.z) < 0.04) o.castShadow = false;
+    });
+
     return world;
+}
+
+// Within each parent, merge plain leaf meshes that share a material (and the
+// same layers / shadow flags / draw order) into a single mesh. Anything that is
+// animated or referenced elsewhere is in `keep` or lives in its own group.
+function mergeStatic(parents, keep) {
+    const ATTRS = ['position', 'normal', 'uv'];
+    for (const parent of parents) {
+        const buckets = new Map();
+        for (const m of parent.children) {
+            if (!m.isMesh || m.isInstancedMesh || m.children.length || keep.has(m) || Array.isArray(m.material)) continue;
+            if (m.material.colorWrite === false) continue;
+            const key = [m.material.uuid, m.layers.mask, m.castShadow, m.receiveShadow, m.renderOrder].join('|');
+            if (!buckets.has(key)) buckets.set(key, []);
+            buckets.get(key).push(m);
+        }
+        for (const list of buckets.values()) {
+            if (list.length < 2) continue;
+            const geos = list.map(m => {
+                m.updateMatrix();
+                const g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+                for (const name of Object.keys(g.attributes)) if (!ATTRS.includes(name)) g.deleteAttribute(name);
+                if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+                g.morphAttributes = {};
+                g.clearGroups();
+                return g.applyMatrix4(m.matrix);
+            });
+            const merged = mergeGeometries(geos, false);
+            if (!merged) continue;
+            const first = list[0];
+            const mesh = new THREE.Mesh(merged, first.material);
+            Object.assign(mesh, { castShadow: first.castShadow, receiveShadow: first.receiveShadow, renderOrder: first.renderOrder, name: 'merged' });
+            mesh.layers.mask = first.layers.mask;
+            parent.add(mesh);
+            list.forEach(m => parent.remove(m));
+        }
+    }
 }
 
 // ---------------------------------------------------------------- shell
@@ -253,11 +310,12 @@ function buildWindow(root, world, register, interact) {
     // Curtains: boxes with sine folds.
     const curtainMat = toon('#ffb7a8');
     const curtain = (x) => {
-        const g = new THREE.BoxGeometry(0.42, 1.55, 0.03, 24, 1, 1);
+        // Hangs from the rod (top at +0.675) and stops 2 cm above the sill.
+        const g = new THREE.BoxGeometry(0.42, 1.255, 0.03, 24, 1, 1);
         const p = g.attributes.position;
         for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) + Math.sin(p.getX(i) * 38) * 0.03);
         g.computeVertexNormals();
-        return add(win, g, curtainMat, x, -0.1, 0.24);
+        return add(win, g, curtainMat, x, 0.0475, 0.24);
     };
     curtain(-0.86);
     curtain(0.86);
@@ -350,6 +408,7 @@ function buildDesk(root, world, register, interact, glowSprite) {
     const display = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.39), new THREE.MeshBasicMaterial({ map: screen.texture, toneMapped: false }));
     display.position.set(0, 0.34, -0.0015);
     monitor.add(noInk(display));
+    world.screenMesh = display;
     glowSprite('#8fb4ff', 1.4, monitor, 0, 0.34, 0.06, 0.18);
     interact(monitor, { id: 'projects', label: 'computer', hint: 'projects' });
 
@@ -456,9 +515,12 @@ function buildDesk(root, world, register, interact, glowSprite) {
     add(chair, rbox(0.08, 0.035, 0.3, 0.015), darkMat, -0.27, 0.77, 0.0);
     add(chair, rbox(0.08, 0.035, 0.3, 0.015), darkMat, 0.27, 0.77, 0.0);
     add(chair, new THREE.CylinderGeometry(0.03, 0.03, 0.36, 8), toon('#c9c4d6'), 0, 0.28, 0);
+    // Star base: the legs meet under a hub, and each sits 1.5 mm higher than the
+    // last so their overlapping tops never share a plane.
+    add(chair, new THREE.CylinderGeometry(0.055, 0.055, 0.06, 12), darkMat, 0, 0.072, 0);
     for (let i = 0; i < 5; i++) {
         const a = i / 5 * Math.PI * 2;
-        const leg = add(chair, box(0.3, 0.035, 0.05), darkMat, Math.cos(a) * 0.15, 0.07, Math.sin(a) * 0.15);
+        const leg = add(chair, box(0.3, 0.035, 0.05), darkMat, Math.cos(a) * 0.15, 0.07 + i * 0.0015, Math.sin(a) * 0.15);
         leg.rotation.y = -a;
         add(chair, new THREE.SphereGeometry(0.03, 8, 6), darkMat, Math.cos(a) * 0.29, 0.03, Math.sin(a) * 0.29);
     }
@@ -468,28 +530,24 @@ function buildCube(parent, world) {
     const cube = new THREE.Group();
     cube.name = 'rubiks';
     const size = 0.019;
-    const colors = { px: '#d94660', nx: '#ff9a3c', py: '#ffffff', ny: '#ffd93d', pz: '#3fbf6a', nz: '#3d6fd8' };
-    const black = toon('#1f1a2e');
-    const geo = new RoundedBoxGeometry(size * 0.96, size * 0.96, size * 0.96, 2, 0.002);
+    // One mesh per cubie: face colours are vertex colours, and a sticker texture
+    // (white square, dark border) gives each face its border.
+    const faceColors = ['#d94660', '#ff9a3c', '#ffffff', '#ffd93d', '#3fbf6a', '#3d6fd8']; // +x -x +y -y +z -z
+    const dark = new THREE.Color('#1f1a2e');
+    const mat = toon('#ffffff', { vertexColors: true, map: tex.stickerTexture() });
     const cubies = [];
     for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
-        const mats = [
-            x === 1 ? toon(colors.px) : black, x === -1 ? toon(colors.nx) : black,
-            y === 1 ? toon(colors.py) : black, y === -1 ? toon(colors.ny) : black,
-            z === 1 ? toon(colors.pz) : black, z === -1 ? toon(colors.nz) : black
-        ];
-        // RoundedBoxGeometry has no face groups, so stickers go on as thin boxes.
-        const c = new THREE.Mesh(geo, black);
+        const geo = new THREE.BoxGeometry(size * 0.96, size * 0.96, size * 0.96);
+        const outer = [x === 1, x === -1, y === 1, y === -1, z === 1, z === -1];
+        const col = new Float32Array(24 * 3);
+        const c3 = new THREE.Color();
+        for (let f = 0; f < 6; f++) {
+            if (outer[f]) c3.set(faceColors[f]); else c3.copy(dark);
+            for (let v = 0; v < 4; v++) c3.toArray(col, (f * 4 + v) * 3);
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        const c = new THREE.Mesh(geo, mat);
         c.position.set(x * size, y * size, z * size);
-        c.castShadow = true;
-        const sticker = (axis, sign, mat) => {
-            const s = new THREE.Mesh(box(axis === 'x' ? 0.001 : size * 0.78, axis === 'y' ? 0.001 : size * 0.78, axis === 'z' ? 0.001 : size * 0.78), mat);
-            s.position[axis] = sign * size * 0.485;
-            c.add(s);
-        };
-        if (x) sticker('x', x, mats[x === 1 ? 0 : 1]);
-        if (y) sticker('y', y, mats[y === 1 ? 2 : 3]);
-        if (z) sticker('z', z, mats[z === 1 ? 4 : 5]);
         cube.add(c);
         cubies.push(c);
     }
@@ -722,7 +780,8 @@ function buildBedAndCat(root, world, register, interact) {
             state.awake = 2.2;
             world.burst(cat.localToWorld(V(0.16, 0.18, 0.04)), 'hearts', 5);
             return ++state.pets;
-        }
+        },
+        love() { world.burst(cat.localToWorld(V(0.16, 0.2, 0.04)), 'hearts', 24); }
     };
     world.updaters.push((dt, t) => {
         torso.scale.y = 0.085 + Math.sin(t * 1.6) * 0.004;
@@ -845,50 +904,27 @@ function buildDecor(root, world, register, interact, glowSprite) {
         r.rotation.set(-0.12, 0, -0.05 + i * 0.04);
     });
 
-    // Beanbag in the open corner
-    const bag = register(group(root, 'beanbag', 1.55, 0, 0.75), 'beanbag');
-    const bagGeo = new THREE.SphereGeometry(0.42, 20, 14);
-    const bp = bagGeo.attributes.position;
-    for (let i = 0; i < bp.count; i++) {
-        const y = bp.getY(i);
-        bp.setY(i, y < 0 ? y * 0.35 : y * 0.62);
-        if (y > 0.1 && bp.getZ(i) < 0) bp.setY(i, bp.getY(i) + 0.12 * (y / 0.42));
-    }
-    bagGeo.computeVertexNormals();
-    const bean = add(bag, bagGeo, toon('#86d3c8'), 0, 0.16, 0);
-    bean.rotation.y = 2.6;
-    const squish = { t: 0 };
-    world.beanbag = { poke() { squish.t = 1; } };
-    world.updaters.push(dt => {
-        squish.t = Math.max(0, squish.t - dt * 1.4);
-        const k = Math.sin(squish.t * Math.PI * 3) * squish.t * 0.18;
-        bean.scale.set(1 + k * 0.6, 1 - k, 1 + k * 0.6);
-    });
-    interact(bag, { id: 'beanbag', label: 'beanbag', hint: 'flop onto it' });
-    const manga = group(bag, 'manga', 0.42, 0, 0.18);
-    ['#ffffff', '#d94660', '#4ab0c8', '#ffffff'].forEach((col, i) => {
-        const m = add(manga, box(0.13, 0.025, 0.19), [toon('#fff6e6'), toon(col), toon(col), toon(col), toon('#fff6e6'), toon(col)], 0, 0.0125 + i * 0.025, 0);
-        m.rotation.y = (i % 2 ? 0.2 : -0.1) + i * 0.05;
-    });
-
     // Wardrobe on the right wall. It opens (there's someone inside), and there's
     // something shiny on top if you look up.
     const wardrobe = register(group(root, 'wardrobe', 2.5, 0, -0.75), 'wardrobe');
     const wood = toon('#f3e6d6');
     const inside = toon('#d8c4ae');
-    add(wardrobe, box(0.02, 2.02, 1.04), inside, 0.26, 1.03, 0);
-    add(wardrobe, box(0.54, 0.03, 1.04), wood, 0, 2.025, 0);
-    add(wardrobe, box(0.54, 0.08, 1.04), wood, 0, 0.06, 0);
-    add(wardrobe, box(0.54, 2.02, 0.03), wood, 0, 1.03, -0.505);
-    add(wardrobe, box(0.54, 2.02, 0.03), wood, 0, 1.03, 0.505);
-    add(wardrobe, box(0.5, 0.025, 0.98), inside, 0.01, 1.92, 0);
+    // Carcass: the sides run the full height and depth; top, bottom, back and
+    // shelf fit between them and sit 1 cm back, so no two faces share a plane.
+    add(wardrobe, box(0.54, 2.04, 0.03), wood, 0, 1.02, -0.505);
+    add(wardrobe, box(0.54, 2.04, 0.03), wood, 0, 1.02, 0.505);
+    add(wardrobe, box(0.52, 0.036, 0.98), wood, 0.01, 2.02, 0);
+    add(wardrobe, box(0.52, 0.08, 0.98), wood, 0.01, 0.05, 0);
+    add(wardrobe, box(0.02, 1.9, 0.98), inside, 0.255, 1.04, 0);
+    add(wardrobe, box(0.49, 0.025, 0.98), inside, 0.0, 1.92, 0);
     add(wardrobe, new THREE.CylinderGeometry(0.012, 0.012, 0.96, 8).rotateX(Math.PI / 2), toon('#c9c4d6'), 0.04, 1.78, 0);
-    [['#d94660', -0.28], ['#3553e8', 0.02], ['#86d3c8', 0.3]].forEach(([col, z]) => {
-        const hoodie = group(wardrobe, 'hoodie', 0.04, 1.78, z);
+    // Hoodies don't overlap and hang at slightly different depths.
+    [['#d94660', -0.3, 0.03], ['#3553e8', 0, 0.05], ['#86d3c8', 0.3, 0.07]].forEach(([col, z, x]) => {
+        const hoodie = group(wardrobe, 'hoodie', x, 1.78, z);
         add(hoodie, new THREE.TorusGeometry(0.03, 0.005, 4, 10, Math.PI).rotateY(Math.PI / 2), toon('#c9c4d6'), 0, 0.01, 0);
-        add(hoodie, rbox(0.09, 0.5, 0.3, 0.03), toon(col), 0, -0.3, 0);
+        add(hoodie, rbox(0.09, 0.5, 0.26, 0.03), toon(col), 0, -0.3, 0);
         add(hoodie, rbox(0.08, 0.12, 0.14, 0.04), toon(col), 0.02, -0.04, 0);
-        hoodie.rotation.x = z * 0.15;
+        hoodie.rotation.x = z * 0.12;
     });
     // The ghost (a nod to Steal a Ghost)
     const ghost = group(wardrobe, 'ghost', 0.0, 0.7, -0.1);
@@ -906,14 +942,14 @@ function buildDecor(root, world, register, interact, glowSprite) {
     add(rightDoor, box(0.02, 1.92, 0.515), doorMat, 0, 0, -0.2575);
     add(rightDoor, box(0.025, 0.22, 0.025), knob, -0.02, 0.06, -0.47);
     // Boxes on top, plus the trophy.
-    add(wardrobe, box(0.36, 0.22, 0.4), toon('#c9a27a'), 0.02, 2.15, 0.25);
-    add(wardrobe, box(0.3, 0.16, 0.3), toon('#b9b0e6'), 0.02, 2.12, -0.32).rotation.y = 0.15;
+    add(wardrobe, box(0.36, 0.22, 0.4), toon('#c9a27a'), 0.02, 2.152, 0.25);
+    add(wardrobe, box(0.3, 0.16, 0.3), toon('#b9b0e6'), 0.02, 2.122, -0.32).rotation.y = 0.15;
     const trophy = register(group(wardrobe, 'trophy', -0.1, 2.04, -0.05), 'trophy');
     const gold = toon('#ffd84d');
     add(trophy, box(0.09, 0.03, 0.09), toon('#8a6a2a'), 0, 0.015, 0);
     add(trophy, new THREE.CylinderGeometry(0.012, 0.02, 0.05, 8), gold, 0, 0.055, 0);
     const cup = [[0, 0], [0.025, 0], [0.05, 0.03], [0.055, 0.08], [0.05, 0.08]].map(([x, y]) => new THREE.Vector2(x, y));
-    add(trophy, new THREE.LatheGeometry(cup, 14), toon('#ffd84d', { side: THREE.DoubleSide }), 0, 0.08, 0);
+    add(trophy, new THREE.LatheGeometry(cup, 14), toon('#ffd84d', { side: THREE.DoubleSide }), 0, 0.082, 0);
     [-1, 1].forEach(sz => add(trophy, new THREE.TorusGeometry(0.022, 0.006, 6, 10, Math.PI), gold, 0, 0.13, sz * 0.055).rotation.set(0, 0, -Math.PI / 2));
     const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex.glowTexture(), color: '#fff3b0', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     sparkle.position.set(0, 0.14, 0);
@@ -969,7 +1005,7 @@ function buildDecor(root, world, register, interact, glowSprite) {
     world.tvScreen = tvScreen;
     // Console + controller
     add(media, box(0.3, 0.06, 0.22), toon('#f8f1e8'), 0.5, 0.5, -0.02);
-    add(media, box(0.3, 0.008, 0.005), toon('#86d3c8'), 0.5, 0.5, 0.0905);
+    add(media, box(0.27, 0.008, 0.005), toon('#86d3c8'), 0.5, 0.5, 0.0905);
     const pad = group(media, 'gamepad', -0.48, 0.47, 0.06);
     pad.rotation.y = 0.4;
     add(pad, rbox(0.15, 0.03, 0.08, 0.012), toon('#3a3150'), 0, 0.015, 0);
@@ -984,10 +1020,11 @@ function buildDecor(root, world, register, interact, glowSprite) {
     register(cal, 'calendar');
     interact(cal, { id: 'calendar', label: 'calendar', hint: "what's today?" });
 
-    // Fairy lights along the top of both walls (click to change colours)
+    // Fairy lights along the top of both walls (click to change colours).
+    // Bulbs are one instanced mesh and the glows one point cloud: two draw calls.
     const fairy = register(group(root, 'fairylights'), 'fairylights');
     const wire = toon('#3a3150');
-    const bulbs = [];
+    const spots = [];
     const string = (from, to, count, sag) => {
         const pts = [];
         for (let i = 0; i <= count; i++) {
@@ -998,36 +1035,54 @@ function buildDecor(root, world, register, interact, glowSprite) {
         }
         const curve = new THREE.CatmullRomCurve3(pts);
         add(fairy, new THREE.TubeGeometry(curve, count * 4, 0.004, 4), wire, 0, 0, 0, { cast: false });
-        pts.forEach((p, i) => {
-            if (i === 0 || i === count) return;
-            const col = ['#ffd68a', '#ffb3c7', '#9fe0ff'][i % 3];
-            const m = add(fairy, new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: col }), p.x, p.y - 0.02, p.z, { cast: false });
-            const g = glowSprite(col, 0.22, fairy, p.x, p.y - 0.02, p.z + 0.02, 0.7);
-            bulbs.push({ m, g, phase: i * 1.7 });
-        });
+        pts.forEach((p, i) => { if (i > 0 && i < count) spots.push(V(p.x, p.y - 0.02, p.z)); });
     };
     string(V(-2.65, 2.62, -2.27), V(2.6, 2.62, -2.27), 24, 0.12);
     string(V(-2.7, 2.62, -2.2), V(-2.7, 2.62, 2.2), 18, 0.12);
-    world.fairy = bulbs;
+
+    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.024, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffffff' }), spots.length);
+    const glowPos = new Float32Array(spots.length * 3);
+    const glowCol = new Float32Array(spots.length * 3);
+    const base = spots.map(() => new THREE.Color());
+    const m4 = new THREE.Matrix4();
+    spots.forEach((p, i) => {
+        bulbs.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z));
+        glowPos.set([p.x, p.y, p.z + 0.02], i * 3);
+    });
+    fairy.add(bulbs);
+    const glowGeo = new THREE.BufferGeometry();
+    glowGeo.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
+    glowGeo.setAttribute('color', new THREE.BufferAttribute(glowCol, 3));
+    const glows = new THREE.Points(glowGeo, new THREE.PointsMaterial({
+        map: tex.glowTexture(), size: 0.36, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    fairy.add(noInk(glows));
+
     const palettes = [['#ffd68a', '#ffb3c7', '#9fe0ff'], ['#ff5d8f', '#ffd84d', '#5df2c4', '#7d8bff'], ['#ffffff', '#dfe8ff'], ['#c9a2ff', '#8ea0ff']];
     let palette = 0;
-    const paint = (cols) => bulbs.forEach((b, i) => {
-        const c = cols[i % cols.length];
-        b.m.material.color.set(c);
-        b.g.material.color.set(c);
-    });
+    const paint = (cols) => {
+        base.forEach((c, i) => { c.set(cols[(i + 1) % cols.length]); bulbs.setColorAt(i, c); });
+        bulbs.instanceColor.needsUpdate = true;
+    };
+    paint(palettes[0]);
     world.lightsColour = {
         next() { palette = (palette + 1) % palettes.length; paint(palettes[palette]); },
         // Disco: every bulb cycles through the rainbow.
-        disco(t) { bulbs.forEach((b, i) => { b.m.material.color.setHSL((t * 0.5 + i * 0.07) % 1, 0.9, 0.65); b.g.material.color.copy(b.m.material.color); }); },
+        disco(t) {
+            base.forEach((c, i) => { c.setHSL((t * 0.5 + i * 0.07) % 1, 0.9, 0.65); bulbs.setColorAt(i, c); });
+            bulbs.instanceColor.needsUpdate = true;
+        },
         reset() { paint(palettes[palette]); }
     };
     interact(fairy, { id: 'fairy', label: 'fairy lights', hint: 'change colour' });
     world.updaters.push((dt, t) => {
-        bulbs.forEach(b => {
-            const k = 0.55 + 0.45 * Math.sin(t * 2 + b.phase);
-            b.g.material.opacity = 0.35 + k * 0.5 * (world.fairyBoost || 1);
+        // Twinkle: additive glows, so scaling the colour is the same as fading.
+        const boost = world.fairyBoost || 1;
+        base.forEach((c, i) => {
+            const k = (0.35 + (0.55 + 0.45 * Math.sin(t * 2 + i * 1.7)) * 0.5 * boost) * 0.7;
+            glowCol[i * 3] = c.r * k; glowCol[i * 3 + 1] = c.g * k; glowCol[i * 3 + 2] = c.b * k;
         });
+        glowGeo.attributes.color.needsUpdate = true;
     });
 }
 

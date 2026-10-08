@@ -101,12 +101,14 @@ void main() {
 // Renders the scene, a normals+depth pass for edge detection, then composites
 // ink lines over the colour image.
 export class InkRenderer {
-    constructor(renderer, scene, camera) {
+    // samples: MSAA for the colour pass (high-DPI screens get away with fewer).
+    constructor(renderer, scene, camera, { samples = 4 } = {}) {
         this.renderer = renderer;
         this.scene = scene;
         this.camera = camera;
+        this.frame = 0;
 
-        this.colorTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true });
+        this.colorTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples, stencilBuffer: true });
         this.normalTarget = new THREE.WebGLRenderTarget(1, 1, { depthTexture: new THREE.DepthTexture(1, 1) });
         this.normalMaterial = new THREE.MeshNormalMaterial();
 
@@ -172,7 +174,8 @@ export class InkRenderer {
         scene.background = background;
         renderer.setClearColor(this.savedClear, savedAlpha);
         renderer.setRenderTarget(this.colorTarget);
-        renderer.shadowMap.needsUpdate = true;
+        // The sun never moves; only small things animate, so every third frame is plenty.
+        if (this.frame++ % 3 === 0) renderer.shadowMap.needsUpdate = true;
         renderer.clear();
         renderer.render(scene, camera);
 

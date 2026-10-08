@@ -44,7 +44,14 @@ function rng(seed) {
 
 function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    // Safari < 16
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
 }
 
 function cloud(ctx, x, y, s, body, light, shade) {
@@ -267,27 +274,27 @@ export function corkTexture() {
         ctx.fillStyle = INK;
         ctx.font = `700 ${size}px ${SANS}`;
         ctx.textAlign = 'left';
-        lines.forEach((l, i) => ctx.fillText(l, -w / 2 + 26, -h / 2 + 70 + i * size * 1.25));
+        lines.forEach((l, i) => ctx.fillText(l, -w / 2 + 26, -h / 2 + 62 + i * size * 1.3));
         ctx.fillStyle = '#d94660';
         ctx.beginPath(); ctx.arc(0, -h / 2 + 18, 11, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
     };
 
     ctx.save();
-    ctx.translate(250, 120);
+    ctx.translate(190, 92);
     ctx.rotate(-0.04);
     ctx.fillStyle = '#fffaf0';
-    ctx.fillRect(-190, -60, 380, 110);
+    ctx.fillRect(-120, -36, 240, 64);
     ctx.fillStyle = INK;
-    ctx.font = `64px ${DISPLAY}`;
+    ctx.font = `36px ${DISPLAY}`;
     ctx.textAlign = 'center';
-    ctx.fillText('ABOUT ME', 0, 26);
+    ctx.fillText('about me', 0, 9);
     ctx.restore();
 
-    note(220, 380, 300, 250, 0.05, '#ffe27a', ['4th year CS', '@ Western U']);
-    note(530, 300, 300, 250, -0.06, '#ffb3c7', ['coding for', '~8 years']);
-    note(830, 200, 300, 250, 0.04, '#9fd8ff', ['roblox dev', 'w/ Pseudoname', 'Games'], 36);
-    note(810, 540, 300, 250, -0.03, '#c7f0a8', ['into AI/ML', '+ game dev'], 38);
+    note(220, 380, 290, 230, 0.05, '#ffe27a', ['4th year CS', '@ Western U'], 32);
+    note(530, 300, 290, 230, -0.06, '#ffb3c7', ['coding for', '~8 years'], 32);
+    note(830, 200, 290, 230, 0.04, '#9fd8ff', ['roblox dev', 'w/ Pseudoname', 'Games'], 30);
+    note(810, 540, 290, 230, -0.03, '#c7f0a8', ['into AI/ML', '+ game dev'], 32);
 
     // Polaroid of Snowy
     ctx.save();
@@ -489,6 +496,17 @@ export function tvTexture() {
     return texture(c);
 }
 
+// Rubik's cube face: white sticker with a dark border (multiplied by the face colour).
+export function stickerTexture() {
+    const [c, ctx] = canvas(64, 64);
+    ctx.fillStyle = '#1f1a2e';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, 6, 6, 52, 52, 8);
+    ctx.fill();
+    return texture(c);
+}
+
 export function heartTexture() {
     const [c, ctx] = canvas(64, 64);
     ctx.fillStyle = '#ff6b9a';
@@ -615,7 +633,8 @@ export function phoneTexture() {
 // The monitor redraws itself while typing, so it keeps its own canvas.
 export class Screen {
     constructor(projects) {
-        [this.canvas, this.ctx] = canvas(1024, 600);
+        // Drawn in 1024x600 coordinates onto a 768x450 canvas (less to upload).
+        [this.canvas, this.ctx] = canvas(768, 450);
         this.texture = texture(this.canvas);
         this.projects = projects;
         this.commands = [
@@ -632,10 +651,11 @@ export class Screen {
         this.draw();
     }
 
-    tick(dt) {
+    // visible: skip the redraw + upload when the monitor is off screen.
+    tick(dt, visible = true) {
         this.blink += dt;
         this.acc = (this.acc || 0) + dt;
-        if (this.acc < 0.06) return;
+        if (this.acc < 0.08) return;
         this.acc = 0;
         const full = this.commands[this.cmd];
         if (this.typed < full.length) this.typed++;
@@ -644,12 +664,13 @@ export class Screen {
             this.typed = 0;
             this.cmd = (this.cmd + 1) % this.commands.length;
         }
-        this.draw();
+        if (visible) this.draw();
     }
 
     draw() {
         const { ctx } = this;
         const W = 1024, H = 600;
+        ctx.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, 0, 0);
         ctx.fillStyle = '#16152a';
         ctx.fillRect(0, 0, W, H);
 
