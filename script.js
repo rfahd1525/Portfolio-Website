@@ -1,3 +1,5 @@
+import { loadRoblox, formatCount } from './room/data.js';
+
 // ===== Theme =====
 const root = document.documentElement;
 const themeToggle = document.getElementById('themeToggle');
@@ -34,6 +36,57 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
 
 const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
+
+// ===== Roblox numbers (assets/roblox.json is refreshed on every deploy) =====
+loadRoblox().then(rb => {
+    const summary = document.querySelector('[data-roblox-summary]');
+    if (summary) {
+        summary.textContent = `The Roblox games I make. ${rb.games.length} out so far with ${formatCount(rb.totalVisits)} visits between them, and ${rb.members.toLocaleString('en')} members in the community.`;
+    }
+    const icons = document.querySelector('[data-roblox-icons]');
+    if (icons && rb.games.length) {
+        icons.replaceChildren(...rb.games.filter(g => g.img).slice(0, 8).map(g => {
+            const img = new Image(28, 28);
+            img.src = g.img;
+            img.alt = '';
+            img.loading = 'lazy';
+            return img;
+        }));
+    }
+});
+
+// ===== Snowy =====
+// Type "snowy" anywhere on the page.
+let typed = '';
+document.addEventListener('keydown', e => {
+    if (document.body.classList.contains('in-room') || e.key.length !== 1) return;
+    typed = (typed + e.key.toLowerCase()).slice(-5);
+    if (typed === 'snowy') { typed = ''; snowyWalk(); }
+});
+
+function snowyWalk() {
+    if (document.querySelector('.snowy')) return;
+    const cat = document.createElement('div');
+    cat.className = 'snowy';
+    cat.innerHTML = `<svg viewBox="0 0 120 70" width="120" height="70" aria-hidden="true">
+        <path class="snowy-tail" d="M18 38 C2 30 4 10 14 12" fill="none" stroke="#1d1726" stroke-width="7" stroke-linecap="round"/>
+        <path class="snowy-tail" d="M18 38 C2 30 4 10 14 12" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
+        <ellipse cx="50" cy="40" rx="34" ry="17" fill="#fff" stroke="#1d1726" stroke-width="3"/>
+        <g class="snowy-legs" stroke="#1d1726" stroke-width="3" fill="#fff">
+            <rect x="26" y="48" width="9" height="16" rx="4"/><rect x="66" y="48" width="9" height="16" rx="4"/>
+        </g>
+        <circle cx="88" cy="30" r="17" fill="#fff" stroke="#1d1726" stroke-width="3"/>
+        <path d="M76 18 L78 4 L88 14 Z M92 14 L102 4 L101 19 Z" fill="#fff" stroke="#1d1726" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M84 30 q3 3 6 0 M94 30 q3 3 6 0" fill="none" stroke="#1d1726" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="97" cy="36" r="2" fill="#ff8fa3"/>
+    </svg><span class="snowy-say">mrrp</span>`;
+    cat.addEventListener('click', () => {
+        cat.classList.add('is-talking');
+        setTimeout(() => cat.classList.remove('is-talking'), 1200);
+    });
+    document.body.appendChild(cat);
+    cat.addEventListener('animationend', e => { if (e.animationName === 'snowy-walk') cat.remove(); });
+}
 
 // ===== 3D room =====
 // The room is a separate module (three.js + the scene); it only loads when
