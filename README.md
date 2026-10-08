@@ -32,9 +32,23 @@ The project list lives in two places: `index.html` for the 2D page and `room/dat
 ## The 3D room
 
 - Opens from the **3D room** button or `#room` in the URL.
-- Drag to look around. Walk with WASD, or click/tap the floor.
-- Click things: the computer (projects), the books on the shelf (one per project), the Roblox figure on the desk (PseudonameGames), the corkboard (about), the phone (contact), the window (day/night), the lamp, the cube, the cat. The door takes you back to the 2D site.
+- **Desktop:** click once to capture the mouse, then the mouse looks around, WASD / arrow keys walk (Shift to go faster), and click or **E** uses whatever the crosshair is on. Esc gives the cursor back.
+- **Phones:** left joystick walks, swipe to look, tap things.
+- The computer and the books on the shelf open the project list, the Roblox figure on the desk shows the games, the corkboard is the about section, the phone is contact, and the door goes back to the 2D site.
+- The TV console has four small games (Snake, Pong, Bricks, Ghost Flap) in `room/arcade.js`. The record player plays a lo-fi loop synthesised in `room/music.js`. Most other things react when clicked, and there are six secrets (listed in `SECRETS` in `room/room.js`).
 - Built with three.js 0.185.1 from jsDelivr (pinned in the import map in `index.html`).
+
+## Roblox data
+
+`assets/roblox.json` (games, visits, member count) and the game icons in `assets/games/` come from the Roblox API via `scripts/fetch-roblox.mjs`. The deploy workflow runs it on every push and every 6 hours, so a new game in the PseudonameGames community shows up on the site by itself. The blurbs for existing games are in `room/data.js`; new games use the first sentence of their Roblox description until you add one.
+
+GitHub pauses scheduled workflows in a repo that has had no commits for 60 days. If that happens, re-enable it from the Actions tab (or push anything).
+
+You can refresh the data locally with `node scripts/fetch-roblox.mjs`.
+
+## Deploys
+
+`.github/workflows/static.yml` publishes the repo to GitHub Pages. Before uploading it runs `scripts/stamp-assets.mjs`, which adds `?v=<commit>` to the CSS/JS URLs in the deployed copy so browsers never mix a new page with old cached files.
 
 ### Using your own models
 

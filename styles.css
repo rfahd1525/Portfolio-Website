@@ -652,6 +652,46 @@ body.in-room { overflow: hidden; }
 
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------------------------------------------------------------- snowy */
+
+.snowy {
+    position: fixed;
+    left: 0;
+    bottom: 8px;
+    z-index: 60;
+    cursor: pointer;
+    animation: snowy-walk 9s linear forwards;
+}
+
+.snowy svg { display: block; animation: snowy-bob 0.4s ease-in-out infinite alternate; }
+.snowy-legs { animation: snowy-step 0.4s steps(2) infinite; }
+.snowy-tail { transform-origin: 18px 38px; animation: snowy-tail 1.2s ease-in-out infinite alternate; }
+
+.snowy-say {
+    position: absolute;
+    left: 70px;
+    top: -26px;
+    padding: 2px 8px;
+    background: var(--card);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    font: 13px var(--font-mono);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.snowy.is-talking .snowy-say { opacity: 1; }
+
+@keyframes snowy-walk {
+    from { transform: translateX(-140px); }
+    to { transform: translateX(calc(100vw + 20px)); }
+}
+
+@keyframes snowy-bob { to { transform: translateY(-2px); } }
+@keyframes snowy-step { 50% { transform: translateX(2px); } }
+@keyframes snowy-tail { to { transform: rotate(14deg); } }
+
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 960px) {

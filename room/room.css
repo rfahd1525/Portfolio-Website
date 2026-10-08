@@ -26,11 +26,8 @@
     height: 100%;
     touch-action: none;
     outline: none;
-    cursor: grab;
+    cursor: pointer;
 }
-
-.room-canvas.is-pointing { cursor: pointer; }
-.room-canvas.is-dragging { cursor: grabbing; }
 
 .room button { font: inherit; color: inherit; cursor: pointer; }
 
@@ -135,24 +132,125 @@
 .room-exit:focus-visible,
 .room-close:focus-visible { outline: 3px solid var(--r-accent); outline-offset: 3px; }
 
-/* Hover label */
-.room-tip {
+/* Crosshair (mouse captured) */
+.room-cross {
     position: absolute;
-    top: 0;
+    left: 50%;
+    top: 50%;
+    pointer-events: none;
+}
+
+.room-cross[hidden] { display: none; }
+
+.room-cross-dot {
+    position: absolute;
+    left: -4px;
+    top: -4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(34, 26, 48, 0.75);
+    transition: transform 0.12s ease;
+}
+
+.room-cross.is-on .room-cross-dot { transform: scale(1.8); background: #ffd84d; }
+
+.room-cross-label {
+    position: absolute;
+    top: 18px;
     left: 0;
+    transform: translateX(-50%);
     padding: 5px 10px 6px;
     background: var(--r-ink);
     color: var(--r-paper);
     font-family: var(--font-mono, monospace);
-    font-size: 12px;
+    font-size: 12.5px;
     white-space: nowrap;
-    pointer-events: none;
     opacity: 0;
     transition: opacity 0.12s ease;
 }
 
-.room-tip.is-on { opacity: 1; }
-.room-tip b { font-weight: 500; color: #ffd25e; margin-right: 4px; }
+.room-cross.is-on .room-cross-label { opacity: 1; }
+.room-cross-label b { font-weight: 500; color: #ffd84d; margin-right: 4px; }
+
+.room kbd {
+    display: inline-block;
+    min-width: 1.6em;
+    margin: 0 1px;
+    padding: 0 5px;
+    border: 1.5px solid currentColor;
+    border-bottom-width: 3px;
+    border-radius: 3px;
+    font: 500 11px/1.5 var(--font-mono, monospace);
+    text-align: center;
+}
+
+/* "Click to look around" card */
+.room-start {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(460px, calc(100% - 32px));
+    padding: 18px 22px 20px;
+    background: var(--r-paper);
+    border: 2.5px solid var(--r-ink);
+    box-shadow: 6px 6px 0 var(--r-ink);
+    text-align: center;
+    pointer-events: none;
+}
+
+.room-start[hidden] { display: none; }
+
+.room-start p { margin: 0; }
+
+.room-start-title {
+    font-family: var(--font-display, sans-serif);
+    font-size: 24px;
+    line-height: 1.2;
+    margin-bottom: 10px !important;
+}
+
+.room-start-keys {
+    font-family: var(--font-mono, monospace);
+    font-size: 12.5px;
+    line-height: 2;
+    color: #4d4560;
+}
+
+/* Hide the HUD clutter while the mouse is captured */
+.room.is-locked .room-chips,
+.room.is-locked .room-exit { opacity: 0.35; }
+
+/* Touch joystick */
+.room-joy {
+    position: absolute;
+    left: 22px;
+    bottom: 84px;
+    width: 116px;
+    height: 116px;
+    border-radius: 50%;
+    background: rgba(251, 246, 236, 0.22);
+    border: 2.5px solid rgba(251, 246, 236, 0.7);
+    touch-action: none;
+}
+
+.room-joy[hidden] { display: none; }
+
+.room-joy-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 48px;
+    height: 48px;
+    margin: -24px 0 0 -24px;
+    border-radius: 50%;
+    background: var(--r-paper);
+    border: 2.5px solid var(--r-ink);
+    box-shadow: 2px 3px 0 var(--r-ink);
+    pointer-events: none;
+}
 
 /* Side panel */
 .room-panel {
@@ -348,7 +446,7 @@
     .room-name { font-size: 11.5px; padding: 6px 10px 7px; }
     .room-exit { font-size: 11.5px; padding: 7px 10px; }
     .room-chips { justify-content: flex-start; padding: 12px 12px 16px; gap: 8px; }
-    .room-hint { bottom: 70px; }
+    .room-hint { bottom: 210px; }
     .room-panel {
         top: auto;
         left: 10px;
@@ -367,3 +465,93 @@
 @media (prefers-reduced-motion: reduce) {
     .room-panel { transition: none; }
 }
+
+/* Secrets counter in the name tag */
+.room-secrets {
+    margin-left: 8px;
+    padding: 1px 6px;
+    background: #ffd84d;
+    color: var(--r-ink);
+}
+
+.room-secrets[hidden] { display: none; }
+
+/* Nap fade */
+.room-fade {
+    position: absolute;
+    inset: 0;
+    background: #0d0b1a;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1s ease;
+}
+
+.room-fade.is-on { opacity: 1; }
+
+/* Disco */
+.room.is-disco .room-canvas { animation: room-disco 1.6s linear infinite; }
+
+@keyframes room-disco {
+    from { filter: hue-rotate(0deg) saturate(1.3); }
+    to { filter: hue-rotate(360deg) saturate(1.3); }
+}
+
+/* Arcade panel */
+.rp-arcade {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.rp-arcade button {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 2px solid var(--r-ink);
+    box-shadow: 3px 3px 0 var(--r-ink);
+    font: 500 14px var(--font-mono, monospace) !important;
+    text-align: left;
+}
+
+.rp-arcade button span {
+    font-size: 11.5px;
+    font-weight: 400;
+    color: #6d6478;
+}
+
+.rp-arcade button:hover { background: #ffd84d; }
+
+.rp-pad {
+    display: grid;
+    grid-template-columns: repeat(3, 46px) 1fr 52px 52px;
+    grid-template-rows: repeat(3, 40px);
+    gap: 4px;
+    margin: 6px 0 14px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+.rp-pad button {
+    padding: 0;
+    background: var(--r-ink);
+    color: var(--r-paper) !important;
+    border: 0;
+    border-radius: 8px;
+    font: 500 15px var(--font-mono, monospace) !important;
+    touch-action: none;
+}
+
+.rp-pad button:active { transform: translateY(2px); background: var(--r-accent); }
+.rp-pad [data-btn="up"] { grid-column: 2; grid-row: 1; }
+.rp-pad [data-btn="left"] { grid-column: 1; grid-row: 2; }
+.rp-pad [data-btn="right"] { grid-column: 3; grid-row: 2; }
+.rp-pad [data-btn="down"] { grid-column: 2; grid-row: 3; }
+.rp-pad .rp-b { grid-column: 5; grid-row: 2 / span 2; align-self: end; height: 52px; border-radius: 50%; background: #6d6478; }
+.rp-pad .rp-a { grid-column: 6; grid-row: 1 / span 2; align-self: start; height: 52px; border-radius: 50%; background: #d94660; }
