@@ -1,239 +1,195 @@
-// ===== Performance Utilities =====
-const throttle = (fn, wait) => {
-    let last = 0;
-    return (...args) => {
-        const now = Date.now();
-        if (now - last >= wait) { last = now; fn(...args); }
-    };
-};
+// ===== Theme =====
+const root = document.documentElement;
+const themeToggle = document.getElementById('themeToggle');
+const themeColor = document.querySelector('meta[name="theme-color"]');
 
-// ===== Cached DOM Elements =====
-const cursor = document.querySelector('.cursor');
-const cursorFollower = document.querySelector('.cursor-follower');
-const heroVisual = document.getElementById('heroVisual');
-const orbContainer = document.getElementById('orbContainer');
-const typingText = document.querySelector('.typing-text');
-const sections = document.querySelectorAll('section[id]');
-const navLinks = document.querySelectorAll('.nav-link');
-const nav = document.querySelector('.navbar');
-const statsSec = document.querySelector('.about-visual');
-const projectCards = document.querySelectorAll('.project-card');
-const hoverElements = document.querySelectorAll('a, button, .project-card, .skill-tag, .social-link');
-const revealElements = document.querySelectorAll('.section-header,.project-card,.about-text,.stats-card,.contact-link-item,.contact-form-container');
+function setTheme(dark) {
+    if (dark) root.dataset.theme = 'dark';
+    else delete root.dataset.theme;
+    themeToggle?.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+    themeColor?.setAttribute('content', dark ? '#15121c' : '#f4efe4');
+    try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
+}
+setTheme(root.dataset.theme === 'dark');
+themeToggle?.addEventListener('click', () => setTheme(root.dataset.theme !== 'dark'));
 
-// ===== Animation State =====
-let mouseX = 0, mouseY = 0, followerX = 0, followerY = 0;
-let orbSx = 0, orbSy = 0, orbTx = 0, orbTy = 0;
-let statsAnimated = false;
-
-// ===== Unified Animation Loop =====
-(function animationLoop() {
-    if (!document.hidden) {
-        followerX += (mouseX - followerX) * 0.15;
-        followerY += (mouseY - followerY) * 0.15;
-        if (cursorFollower) {
-            cursorFollower.style.left = followerX + 'px';
-            cursorFollower.style.top = followerY + 'px';
-        }
-
-        if (heroVisual && orbContainer) {
-            orbSx += (orbTx - orbSx) * 0.08;
-            orbSy += (orbTy - orbSy) * 0.08;
-            orbContainer.style.transform = `translate(${orbSx}px,${orbSy}px)`;
-        }
-    }
-
-    requestAnimationFrame(animationLoop);
-})();
-
-// ===== Custom Cursor (Throttled) =====
-document.addEventListener('mousemove', throttle(e => {
-    mouseX = e.clientX; mouseY = e.clientY;
-    if (cursor) { cursor.style.left = mouseX + 'px'; cursor.style.top = mouseY + 'px'; }
-}, 8), { passive: true });
-
-hoverElements.forEach(el => {
-    el.addEventListener('mouseenter', () => cursorFollower?.classList.add('hover'));
-    el.addEventListener('mouseleave', () => cursorFollower?.classList.remove('hover'));
-});
-
-// ===== Particle Colors =====
-const DARK_PARTICLES = ['#e8503a', '#4ab0c8', '#e8a040'];
-const LIGHT_PARTICLES = ['#c03a28', '#2880a0', '#b87820'];
-
-function getParticleColors() {
-    return document.documentElement.dataset.theme === 'light' ? LIGHT_PARTICLES : DARK_PARTICLES;
+// ===== Small things =====
+const toastEl = document.getElementById('toast');
+function toast(text) {
+    if (!toastEl) return;
+    toastEl.textContent = text;
+    toastEl.classList.add('is-on');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => toastEl.classList.remove('is-on'), 2200);
 }
 
-// ===== Particles =====
-(function createParticles() {
-    const c = document.getElementById('particles');
-    if (!c) return;
-    const colors = getParticleColors();
-    for (let i = 0; i < 45; i++) {
-        const p = document.createElement('div');
-        p.className = 'particle';
-        p.style.cssText = `left:${Math.random() * 100}%;animation-delay:${Math.random() * 15}s;animation-duration:${10 + Math.random() * 10}s;background:${colors[Math.floor(Math.random() * colors.length)]};width:${2 + Math.random() * 3}px;height:${2 + Math.random() * 3}px`;
-        c.appendChild(p);
+document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(btn.dataset.copy);
+        toast('Copied ' + btn.dataset.copy);
+    } catch {
+        toast(btn.dataset.copy);
     }
-})();
-
-function updateParticleColors() {
-    const colors = getParticleColors();
-    document.querySelectorAll('.particle').forEach(p => {
-        p.style.background = colors[Math.floor(Math.random() * colors.length)];
-    });
-}
-
-// ===== Interactive Sphere =====
-if (heroVisual && orbContainer) {
-    heroVisual.addEventListener('mousemove', e => {
-        const r = heroVisual.getBoundingClientRect();
-        const rx = e.clientX - r.left - r.width / 2, ry = e.clientY - r.top - r.height / 2;
-        const d = Math.sqrt(rx * rx + ry * ry);
-        if (d < 200 && d > 0) { const s = (200 - d) / 200; orbTx = -rx / d * 80 * s; orbTy = -ry / d * 80 * s; }
-        else { orbTx = orbTy = 0; }
-    }, { passive: true });
-    heroVisual.addEventListener('mouseleave', () => orbTx = orbTy = 0, { passive: true });
-}
-
-// ===== Typing Effect =====
-const phrases = ['Full-Stack Developer', 'AI Enthusiast', 'Problem Solver', 'Software Developer', 'CS Student @ Western'];
-let pi = 0, ci = 0, del = false;
-(function type() {
-    if (!typingText) return;
-    const p = phrases[pi];
-    typingText.textContent = p.substring(0, del ? --ci : ++ci);
-    let sp = del ? 50 : 100;
-    if (!del && ci === p.length) { del = true; sp = 2000; }
-    else if (del && ci === 0) { del = false; pi = (pi + 1) % phrases.length; sp = 500; }
-    setTimeout(type, sp);
-})();
-
-// ===== Navbar Scroll Handler (uses CSS class, not inline styles) =====
-let scrollTicking = false;
-const handleScroll = () => {
-    const scrollTop = window.scrollY;
-
-    sections.forEach(s => {
-        if (scrollTop > s.offsetTop - 100 && scrollTop <= s.offsetTop + s.offsetHeight) {
-            navLinks.forEach(l => { l.classList.toggle('active', l.getAttribute('href') === '#' + s.id); });
-        }
-    });
-
-    nav?.classList.toggle('scrolled', scrollTop > 50);
-
-    scrollTicking = false;
-};
-
-window.addEventListener('scroll', () => {
-    if (!scrollTicking) {
-        requestAnimationFrame(handleScroll);
-        scrollTicking = true;
-    }
-}, { passive: true });
-
-// Smooth scroll
-document.querySelectorAll('a[href^="#"]').forEach(a => a.addEventListener('click', e => {
-    e.preventDefault();
-    document.querySelector(a.getAttribute('href'))?.scrollIntoView({ behavior: 'smooth' });
 }));
 
-// ===== Mobile Menu Toggle =====
-const hamburger = document.querySelector('.hamburger');
-const navLinksEl = document.querySelector('.nav-links');
-const navActions = document.querySelector('.nav-actions');
+const year = document.getElementById('year');
+if (year) year.textContent = new Date().getFullYear();
 
-hamburger?.addEventListener('click', () => {
-    hamburger.classList.toggle('active');
-    navLinksEl?.classList.toggle('active');
-    navActions?.classList.toggle('active');
+// ===== 3D room =====
+// The room is a separate module (three.js + the scene); it only loads when
+// someone asks for it. A full-screen "warp" covers the swap both ways.
+const roomEl = document.getElementById('room');
+const warpEl = document.getElementById('warp');
+const warpCanvas = warpEl?.querySelector('.warp-lines');
+const warpStatus = warpEl?.querySelector('.warp-status');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const pageParts = [document.querySelector('.nav'), document.querySelector('main'), document.querySelector('.footer')];
+
+let roomModule = null;
+let room = null;
+let roomState = 'out'; // out | entering | in | leaving
+let returnFocus = null;
+let pushedHash = false;
+
+const loadRoomModule = () => (roomModule ||= import('./room/room.js'));
+
+const tween = (ms, fn) => new Promise(resolve => {
+    const t0 = performance.now();
+    const step = now => {
+        const k = Math.min(1, (now - t0) / ms);
+        fn(k);
+        if (k < 1) requestAnimationFrame(step); else resolve();
+    };
+    requestAnimationFrame(step);
 });
 
-navLinksEl?.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', () => {
-        hamburger?.classList.remove('active');
-        navLinksEl?.classList.remove('active');
-        navActions?.classList.remove('active');
-    });
-});
-
-// ===== Theme Toggle (Circular Ripple) =====
-const themeToggle = document.getElementById('themeToggle');
-
-// Load saved theme before paint
-const savedTheme = localStorage.getItem('theme');
-if (savedTheme === 'light') {
-    document.documentElement.dataset.theme = 'light';
+// Manga-style speed lines rushing toward a point.
+function drawLines(origin, strength, cover) {
+    if (!warpCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = innerWidth, h = innerHeight;
+    if (warpCanvas.width !== Math.round(w * dpr)) { warpCanvas.width = Math.round(w * dpr); warpCanvas.height = Math.round(h * dpr); }
+    const ctx = warpCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (strength <= 0) return;
+    const reach = Math.hypot(Math.max(origin.x, w - origin.x), Math.max(origin.y, h - origin.y));
+    ctx.fillStyle = cover > 0.5 ? `rgba(251,246,236,${0.5 * strength})` : `rgba(29,23,38,${0.85 * strength})`;
+    const count = 110;
+    for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const inner = reach * (1 - strength * (0.55 + Math.random() * 0.35));
+        const spread = (0.004 + Math.random() * 0.012);
+        ctx.beginPath();
+        ctx.moveTo(origin.x + Math.cos(a) * inner, origin.y + Math.sin(a) * inner);
+        ctx.lineTo(origin.x + Math.cos(a - spread) * reach, origin.y + Math.sin(a - spread) * reach);
+        ctx.lineTo(origin.x + Math.cos(a + spread) * reach, origin.y + Math.sin(a + spread) * reach);
+        ctx.fill();
+    }
 }
 
-themeToggle?.addEventListener('click', e => {
-    const btn = e.currentTarget;
-    const rect = btn.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const goingLight = document.documentElement.dataset.theme !== 'light';
+function setCover(v) { warpEl?.style.setProperty('--cover', v.toFixed(3)); }
 
-    // Radius to cover the entire viewport from the click origin
-    const maxR = Math.sqrt(
-        Math.max(cx, window.innerWidth - cx) ** 2 +
-        Math.max(cy, window.innerHeight - cy) ** 2
-    ) + 50;
+async function warpIn(origin) {
+    warpEl.hidden = false;
+    document.body.classList.add('warping');
+    if (reduceMotion.matches) { await tween(200, k => setCover(k)); return; }
+    await tween(650, k => {
+        drawLines(origin, Math.min(1, k * 1.6), k);
+        setCover(Math.max(0, (k - 0.45) / 0.55));
+    });
+}
 
-    const overlay = document.createElement('div');
-    overlay.style.cssText = [
-        'position:fixed', 'inset:0', 'z-index:99999', 'pointer-events:none',
-        `background:${goingLight ? '#eef2f8' : '#0c0e14'}`,
-        `clip-path:circle(0px at ${cx}px ${cy}px)`,
-        'transition:clip-path 0.62s cubic-bezier(0.4,0,0.2,1)'
-    ].join(';');
-    document.body.appendChild(overlay);
-
-    // Trigger expand
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-        overlay.style.clipPath = `circle(${maxR}px at ${cx}px ${cy}px)`;
-    }));
-
-    // Switch theme once overlay covers the screen, then fade out
-    setTimeout(() => {
-        document.documentElement.dataset.theme = goingLight ? 'light' : 'dark';
-        localStorage.setItem('theme', goingLight ? 'light' : 'dark');
-        updateParticleColors();
-
-        overlay.style.transition = 'opacity 0.28s ease';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 300);
-    }, 580);
-});
-
-// ===== Stats Counter =====
-const statsObs = new IntersectionObserver(e => {
-    if (e[0].isIntersecting && !statsAnimated) {
-        document.querySelectorAll('.stat-number').forEach(s => {
-            const t = +s.dataset.target; let c = 0;
-            const i = setInterval(() => {
-                c += t / 125;
-                s.textContent = (c >= t ? t : Math.floor(c)) + '+';
-                if (c >= t) clearInterval(i);
-            }, 16);
+async function warpOut(origin) {
+    if (reduceMotion.matches) {
+        await tween(250, k => setCover(1 - k));
+    } else {
+        await tween(550, k => {
+            drawLines(origin, (1 - k) * 0.7, 1 - k);
+            setCover(1 - k);
         });
-        statsAnimated = true;
     }
-}, { threshold: 0.5 });
-if (statsSec) statsObs.observe(statsSec);
+    drawLines(origin, 0, 0);
+    warpEl.hidden = true;
+    document.body.classList.remove('warping');
+}
 
-// ===== Project Card Tilt =====
-projectCards.forEach(c => {
-    c.addEventListener('mousemove', e => {
-        const r = c.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-        c.style.transform = `perspective(1000px) rotateX(${(y - r.height / 2) / 20}deg) rotateY(${(r.width / 2 - x) / 20}deg) translateY(-10px)`;
-    }, { passive: true });
-    c.addEventListener('mouseleave', () => c.style.transform = '', { passive: true });
+function originOf(el) {
+    if (!el) return { x: innerWidth / 2, y: innerHeight / 2 };
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+async function enterRoom(trigger) {
+    if (roomState !== 'out' || !roomEl) return;
+    roomState = 'entering';
+    returnFocus = trigger || document.activeElement;
+    const origin = originOf(trigger);
+    const loading = loadRoomModule();
+
+    await warpIn(origin);
+    warpStatus.textContent = 'loading the room…';
+    try {
+        const { mountRoom } = await loading;
+        if (!room) {
+            roomEl.hidden = false;
+            room = await mountRoom(roomEl, { onExit: () => leaveRoom() });
+        }
+    } catch (err) {
+        console.error(err);
+        roomEl.hidden = true;
+        warpStatus.textContent = '';
+        roomState = 'out';
+        await warpOut(origin);
+        toast("The 3D room couldn't start here (it needs WebGL).");
+        if (location.hash === '#room') history.replaceState(null, '', location.pathname + location.search);
+        return;
+    }
+    warpStatus.textContent = '';
+    roomEl.hidden = false;
+    document.body.classList.add('in-room');
+    pageParts.forEach(el => el && (el.inert = true));
+    room.start();
+    if (location.hash !== '#room') { history.pushState({ room: true }, '', '#room'); pushedHash = true; }
+    roomState = 'in';
+    roomEl.querySelector('.room-exit')?.focus({ preventScroll: true });
+    await warpOut({ x: innerWidth / 2, y: innerHeight / 2 });
+}
+
+async function leaveRoom({ fromHistory = false } = {}) {
+    if (roomState !== 'in') return;
+    roomState = 'leaving';
+    const origin = { x: innerWidth / 2, y: innerHeight / 2 };
+    await warpIn(origin);
+    room.stop();
+    roomEl.hidden = true;
+    document.body.classList.remove('in-room');
+    pageParts.forEach(el => el && (el.inert = false));
+    if (!fromHistory) {
+        if (pushedHash) history.back();
+        else history.replaceState(null, '', location.pathname + location.search);
+    }
+    pushedHash = false;
+    roomState = 'out';
+    returnFocus?.focus?.({ preventScroll: true });
+    await warpOut(originOf(returnFocus));
+}
+
+document.querySelectorAll('[data-enter-room]').forEach(btn => {
+    btn.addEventListener('click', () => enterRoom(btn));
+    // Start downloading three.js as soon as someone looks interested.
+    btn.addEventListener('pointerenter', loadRoomModule, { once: true });
+    btn.addEventListener('focus', loadRoomModule, { once: true });
 });
 
-// ==========================================================================
-// RUBIK'S CUBE
-// ==========================================================================
+window.addEventListener('popstate', () => {
+    if (location.hash === '#room') enterRoom(null);
+    else leaveRoom({ fromHistory: true });
+});
+
+if (location.hash === '#room') enterRoom(null);
+
+// ===== Rubik's cube =====
 
 class RubiksCube {
     constructor(containerId, cubeId, moveCountId) {
@@ -242,7 +198,7 @@ class RubiksCube {
         this.moveCountEl = document.getElementById(moveCountId);
         if (!this.cubeEl) return;
 
-        this.size = window.innerWidth <= 768 ? 50 : 65;
+        this.size = window.innerWidth <= 640 ? 46 : 58;
         this.gap = 2;
 
         this.colors = {
@@ -532,6 +488,7 @@ class RubiksCube {
             if (this.container) this.container.style.cursor = 'grab';
         };
 
+        if (!this.container) return;
         this.container.addEventListener('mousedown', onDragStart);
         this.container.addEventListener('touchstart', onDragStart, { passive: true });
         document.addEventListener('mousemove', onDragMove);
@@ -547,20 +504,8 @@ class RubiksCube {
             });
         });
 
-        const viewBtns = {
-            'viewLeft':  () => { this.rotY -= 30; },
-            'viewRight': () => { this.rotY += 30; },
-            'viewUp':    () => { this.rotX -= 30; },
-            'viewDown':  () => { this.rotX += 30; }
-        };
-        Object.keys(viewBtns).forEach(id => {
-            document.getElementById(id)?.addEventListener('click', () => {
-                viewBtns[id]();
-                this.updateView();
-            });
-        });
-
         window.addEventListener('keydown', e => {
+            if (document.body.classList.contains('in-room') || e.metaKey || e.ctrlKey || e.altKey) return;
             const key = e.key.toUpperCase();
             if (['U', 'D', 'F', 'B', 'L', 'R'].includes(key)) {
                 this.move(e.shiftKey ? key + "'" : key);
@@ -590,7 +535,7 @@ class RubiksCube {
     }
 
     celebrate() {
-        const colors = ['#e8503a', '#4ab0c8', '#e8a040', '#c04890', '#f2eef0', '#4ab0c8'];
+        const colors = ['#3553e8', '#ffd84d', '#1d1726', '#e9a8c8', '#86d3c8', '#ffffff'];
         for (let i = 0; i < 80; i++) {
             const p = document.createElement('div');
             Object.assign(p.style, {
@@ -613,53 +558,18 @@ class RubiksCube {
     }
 }
 
-// Initialize Rubik's Cube
-const cubeApp = new RubiksCube('rubiksContainer', 'rubiksCube', 'moveCount');
+new RubiksCube('rubiksContainer', 'rubiksCube', 'moveCount');
 
-// Contact Form
-document.getElementById('contactForm')?.addEventListener('submit', e => {
-    e.preventDefault();
-    const n  = document.getElementById('name').value;
-    const em = document.getElementById('email').value;
-    const m  = document.getElementById('message').value;
-    window.location.href = `mailto:rfahd15@gmail.com?subject=Portfolio Contact from ${encodeURIComponent(n)}&body=${encodeURIComponent(`From: ${n}\nEmail: ${em}\n\n${m}`)}`;
-});
-
-// Scroll Reveal
-const revealObs = new IntersectionObserver(e => e.forEach(en => {
-    if (en.isIntersecting) {
-        en.target.style.opacity = '1';
-        en.target.style.transform = 'translateY(0)';
-    }
-}), { threshold: 0.1 });
-
-revealElements.forEach(el => {
-    el.style.cssText = 'opacity:0;transform:translateY(28px);transition:opacity 0.6s,transform 0.6s';
-    revealObs.observe(el);
-});
-
-// Page Load fade-in
-window.addEventListener('load', () => {
-    document.body.style.opacity = '0';
-    document.body.style.transition = 'opacity 0.5s';
-    setTimeout(() => document.body.style.opacity = '1', 100);
-});
-
-// Dev console
-console.log('%c👋 Hello, curious one.', 'font-size:18px;font-weight:bold;color:#e8503a');
-console.log('%cContact: rfahd15@gmail.com', 'font-size:13px;color:#4ab0c8');
-console.log('%cTry: ↑↑↓↓←→←→BA', 'font-size:11px;color:#e8a040');
-
-let ki = 0;
-const kc = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+// ===== Konami code =====
+const konami = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+let konamiAt = 0;
 document.addEventListener('keydown', e => {
-    if (e.key === kc[ki]) { ki++; if (ki === kc.length) { easterEgg(); ki = 0; } } else ki = 0;
+    if (document.body.classList.contains('in-room')) return;
+    konamiAt = e.key === konami[konamiAt] ? konamiAt + 1 : (e.key === konami[0] ? 1 : 0);
+    if (konamiAt === konami.length) {
+        konamiAt = 0;
+        document.body.animate([{ filter: 'hue-rotate(0deg)' }, { filter: 'hue-rotate(360deg)' }], { duration: 2000, iterations: 2 });
+    }
 });
-function easterEgg() {
-    document.body.style.animation = 'rainbow 2s linear infinite';
-    const st = document.createElement('style');
-    st.id = 'rainbow-st';
-    st.textContent = '@keyframes rainbow{0%{filter:hue-rotate(0)}100%{filter:hue-rotate(360deg)}}';
-    document.head.appendChild(st);
-    setTimeout(() => { document.body.style.animation = ''; st.remove(); }, 5000);
-}
+
+console.log('%cHi. The source for this site is at github.com/rfahd1525/Portfolio-Website', 'font: 13px monospace');
