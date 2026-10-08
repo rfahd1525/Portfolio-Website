@@ -46,7 +46,7 @@ async function main() {
         const q = ids.join(',');
         (await get(`https://games.roblox.com/v1/games?universeIds=${q}`)).data.forEach(d => details.set(d.id, d));
         (await get(`https://games.roblox.com/v1/games/votes?universeIds=${q}`)).data.forEach(v => votes.set(v.id, v));
-        (await get(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${q}&size=256x256&format=Webp&isCircular=false`)).data
+        (await get(`https://thumbnails.roblox.com/v1/games/icons?universeIds=${q}&size=150x150&format=Jpeg&isCircular=false`)).data
             .forEach(t => t.state === 'Completed' && icons.set(t.targetId, t.imageUrl));
     }
 
@@ -57,8 +57,9 @@ async function main() {
         let icon = null;
         if (icons.has(g.id)) {
             try {
-                await fs.writeFile(path.join(iconDir, `${g.id}.webp`), await get(icons.get(g.id), { json: false }));
-                icon = `assets/games/${g.id}.webp`;
+                // JPEG rather than WebP: some browsers (e.g. iOS Lockdown Mode) block WebP.
+                await fs.writeFile(path.join(iconDir, `${g.id}.jpg`), await get(icons.get(g.id), { json: false }));
+                icon = `assets/games/${g.id}.jpg`;
             } catch (err) {
                 console.warn(`icon for ${g.id}: ${err.message}`);
             }

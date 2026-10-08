@@ -466,16 +466,6 @@
     .room-panel { transition: none; }
 }
 
-/* Secrets counter in the name tag */
-.room-secrets {
-    margin-left: 8px;
-    padding: 1px 6px;
-    background: #ffd84d;
-    color: var(--r-ink);
-}
-
-.room-secrets[hidden] { display: none; }
-
 /* Nap fade */
 .room-fade {
     position: absolute;
@@ -499,19 +489,20 @@
 /* Arcade panel */
 .rp-arcade {
     list-style: none;
-    margin: 0 0 18px;
+    margin: 0 0 16px;
     padding: 0;
     display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
 }
 
 .rp-arcade button {
     width: 100%;
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 12px;
-    padding: 10px 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
     background: #fff;
     border: 2px solid var(--r-ink);
     box-shadow: 3px 3px 0 var(--r-ink);
@@ -520,7 +511,7 @@
 }
 
 .rp-arcade button span {
-    font-size: 11.5px;
+    font-size: 10.5px;
     font-weight: 400;
     color: #6d6478;
 }
@@ -555,3 +546,7 @@
 .rp-pad [data-btn="down"] { grid-column: 2; grid-row: 3; }
 .rp-pad .rp-b { grid-column: 5; grid-row: 2 / span 2; align-self: end; height: 52px; border-radius: 50%; background: #6d6478; }
 .rp-pad .rp-a { grid-column: 6; grid-row: 1 / span 2; align-self: start; height: 52px; border-radius: 50%; background: #d94660; }
+
+.room.is-touch .room-panel[data-panel="arcade"] .room-panel-body { display: flex; flex-direction: column; }
+.room.is-touch .room-panel[data-panel="arcade"] .rp-pad { order: -1; margin: 0 0 14px; }
+.room.is-touch .room-panel[data-panel="arcade"] .rp-stack { display: none; }

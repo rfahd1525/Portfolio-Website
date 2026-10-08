@@ -90,10 +90,10 @@ const FALLBACK = {
     updated: '2026-10-08T20:32:35Z',
     community: { name: 'PseudonameGames', members: 1267, url: 'https://www.roblox.com/communities/897448846/PseudonameGames' },
     games: [
-        { id: 10084260628, visits: 40602, icon: 'assets/games/10084260628.webp', url: 'https://www.roblox.com/games/110422210684606' },
-        { id: 10768484463, visits: 2714, icon: 'assets/games/10768484463.webp', url: 'https://www.roblox.com/games/89281860269650' },
-        { id: 10769094310, visits: 2438, icon: 'assets/games/10769094310.webp', url: 'https://www.roblox.com/games/104850311133949' },
-        { id: 10768202465, visits: 168, icon: 'assets/games/10768202465.webp', url: 'https://www.roblox.com/games/80408636452165' }
+        { id: 10084260628, visits: 40602, icon: 'assets/games/10084260628.jpg', url: 'https://www.roblox.com/games/110422210684606' },
+        { id: 10768484463, visits: 2714, icon: 'assets/games/10768484463.jpg', url: 'https://www.roblox.com/games/89281860269650' },
+        { id: 10769094310, visits: 2438, icon: 'assets/games/10769094310.jpg', url: 'https://www.roblox.com/games/104850311133949' },
+        { id: 10768202465, visits: 168, icon: 'assets/games/10768202465.jpg', url: 'https://www.roblox.com/games/80408636452165' }
     ]
 };
 
