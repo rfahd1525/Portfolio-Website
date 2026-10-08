@@ -1,5 +1,3 @@
-import { loadRoblox, formatCount } from './room/data.js';
-
 // ===== Theme =====
 const root = document.documentElement;
 const themeToggle = document.getElementById('themeToggle');
@@ -13,16 +11,80 @@ function setTheme(dark) {
     try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch { /* private mode */ }
 }
 setTheme(root.dataset.theme === 'dark');
-themeToggle?.addEventListener('click', () => setTheme(root.dataset.theme !== 'dark'));
+
+// Switching themes: halftone dots in the new paper colour ripple out from the
+// button, the theme flips while the page is covered, then the dots shrink away.
+let switching = false;
+function themeWipe(dark) {
+    const btn = themeToggle.getBoundingClientRect();
+    const ox = btn.left + btn.width / 2, oy = btn.top + btn.height / 2;
+    const w = innerWidth, h = innerHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const canvas = document.createElement('canvas');
+    canvas.className = 'theme-wipe';
+    canvas.width = Math.ceil(w * dpr);
+    canvas.height = Math.ceil(h * dpr);
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const paper = dark ? '#15121c' : '#f4efe4';
+    const edge = dark ? '#8ea0ff' : '#3553e8';
+    const S = 22;                         // dot spacing
+    const R = S * 0.78;                   // full-size dots overlap, covering the page
+    const band = 220;                     // how wide the growing edge is (px)
+    const far = Math.hypot(Math.max(ox, w - ox), Math.max(oy, h - oy)) + band;
+    const dots = [];
+    for (let y = -S, row = 0; y < h + S; y += S * 0.866, row++) {
+        for (let x = (row % 2) * S / 2 - S; x < w + S; x += S) dots.push([x, y, Math.hypot(x - ox, y - oy)]);
+    }
+    const draw = (front, growing) => {
+        ctx.clearRect(0, 0, w, h);
+        for (const [x, y, d] of dots) {
+            let k = Math.min(1, Math.max(0, (front - d) / band));
+            if (!growing) k = 1 - k;
+            if (k <= 0) continue;
+            ctx.fillStyle = growing && k < 0.55 ? edge : paper;
+            ctx.beginPath();
+            ctx.arc(x, y, R * k, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    };
+    const run = (ms, growing) => new Promise(done => {
+        const t0 = performance.now();
+        const step = now => {
+            const t = Math.min(1, (now - t0) / ms);
+            draw(t * t * (3 - 2 * t) * far, growing);
+            if (t < 1) requestAnimationFrame(step); else done();
+        };
+        requestAnimationFrame(step);
+    });
+    switching = true;
+    themeToggle.classList.add('is-turning');
+    run(520, true)
+        .then(() => { setTheme(dark); return run(480, false); })
+        .finally(() => {
+            canvas.remove();
+            themeToggle.classList.remove('is-turning');
+            switching = false;
+        });
+}
+
+themeToggle?.addEventListener('click', () => {
+    if (switching) return;
+    const dark = root.dataset.theme !== 'dark';
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) setTheme(dark);
+    else themeWipe(dark);
+});
 
 // ===== Small things =====
 const toastEl = document.getElementById('toast');
-function toast(text) {
+function toast(text, ms = 2200) {
     if (!toastEl) return;
     toastEl.textContent = text;
     toastEl.classList.add('is-on');
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => toastEl.classList.remove('is-on'), 2200);
+    toast.timer = setTimeout(() => toastEl.classList.remove('is-on'), ms);
 }
 
 document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async () => {
@@ -38,7 +100,8 @@ const year = document.getElementById('year');
 if (year) year.textContent = new Date().getFullYear();
 
 // ===== Roblox numbers (assets/roblox.json is refreshed on every deploy) =====
-loadRoblox().then(rb => {
+// Loaded separately so the rest of the page works even if this fails.
+import('./room/data.js').then(({ loadRoblox, formatCount }) => loadRoblox().then(rb => {
     const summary = document.querySelector('[data-roblox-summary]');
     if (summary) {
         summary.textContent = `The Roblox games I make. ${rb.games.length} out so far with ${formatCount(rb.totalVisits)} visits between them, and ${rb.members.toLocaleString('en')} members in the community.`;
@@ -53,7 +116,7 @@ loadRoblox().then(rb => {
             return img;
         }));
     }
-});
+})).catch(err => console.warn('Roblox data unavailable', err));
 
 // ===== Snowy =====
 // Type "snowy" anywhere on the page.
@@ -96,7 +159,8 @@ const warpEl = document.getElementById('warp');
 const warpCanvas = warpEl?.querySelector('.warp-lines');
 const warpStatus = warpEl?.querySelector('.warp-status');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const pageParts = [document.querySelector('.nav'), document.querySelector('main'), document.querySelector('.footer')];
+const pageParts = [document.querySelector('.skip'), document.querySelector('.nav'), document.querySelector('main'), document.querySelector('.footer')];
+const setPageInert = on => pageParts.forEach(el => el && (el.inert = on));
 
 let roomModule = null;
 let room = null;
@@ -173,10 +237,30 @@ function originOf(el) {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
+// Check what the room needs before downloading anything, so the message says
+// what's actually wrong.
+function roomBlocker() {
+    if (!window.HTMLScriptElement?.supports?.('importmap')) {
+        return 'The 3D room needs a newer browser (Safari 16.4+, or a recent Chrome or Firefox).';
+    }
+    try {
+        const gl = document.createElement('canvas').getContext('webgl2');
+        if (gl) { gl.getExtension('WEBGL_lose_context')?.loseContext(); return null; }
+    } catch { /* fall through */ }
+    return 'The 3D room needs WebGL, which is turned off in this browser. On iPhone, Lockdown Mode does this.';
+}
+
 async function enterRoom(trigger) {
     if (roomState !== 'out' || !roomEl) return;
+    const blocker = roomBlocker();
+    if (blocker) {
+        toast(blocker, 6000);
+        if (location.hash === '#room') history.replaceState(null, '', location.pathname + location.search);
+        return;
+    }
     roomState = 'entering';
     returnFocus = trigger || document.activeElement;
+    setPageInert(true);   // nothing underneath the loading screen should react
     const origin = originOf(trigger);
     const loading = loadRoomModule();
 
@@ -193,15 +277,15 @@ async function enterRoom(trigger) {
         roomEl.hidden = true;
         warpStatus.textContent = '';
         roomState = 'out';
+        setPageInert(false);
         await warpOut(origin);
-        toast("The 3D room couldn't start here (it needs WebGL).");
+        toast(`The 3D room couldn't start: ${err.message || err}`, 6000);
         if (location.hash === '#room') history.replaceState(null, '', location.pathname + location.search);
         return;
     }
     warpStatus.textContent = '';
     roomEl.hidden = false;
     document.body.classList.add('in-room');
-    pageParts.forEach(el => el && (el.inert = true));
     room.start();
     if (location.hash !== '#room') { history.pushState({ room: true }, '', '#room'); pushedHash = true; }
     roomState = 'in';
@@ -217,7 +301,7 @@ async function leaveRoom({ fromHistory = false } = {}) {
     room.stop();
     roomEl.hidden = true;
     document.body.classList.remove('in-room');
-    pageParts.forEach(el => el && (el.inert = false));
+    setPageInert(false);
     if (!fromHistory) {
         if (pushedHash) history.back();
         else history.replaceState(null, '', location.pathname + location.search);

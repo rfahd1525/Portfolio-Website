@@ -73,6 +73,7 @@ export class LofiPlayer {
     start() {
         if (!this.ctx) this.setup();
         const ctx = this.ctx;
+        clearTimeout(this.suspendTimer);
         ctx.resume();
         this.playing = true;
         this.step = 0;
@@ -88,6 +89,9 @@ export class LofiPlayer {
         this.playing = false;
         clearInterval(this.timer);
         this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.15);
+        // Let the fade finish, then stop the audio thread (saves battery).
+        clearTimeout(this.suspendTimer);
+        this.suspendTimer = setTimeout(() => { if (!this.playing) this.ctx.suspend(); }, 700);
     }
 
     schedule() {
