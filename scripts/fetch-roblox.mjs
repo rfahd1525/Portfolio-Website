@@ -20,7 +20,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function get(url, { json = true } = {}) {
     for (let attempt = 1; attempt <= 4; attempt++) {
-        const res = await fetch(url, { headers: { accept: json ? 'application/json' : '*/*' } });
+        let res;
+        try {
+            res = await fetch(url, { headers: { accept: json ? 'application/json' : '*/*' } });
+        } catch (err) {
+            // network hiccup: retry like a 5xx
+            if (attempt === 4) throw err;
+            await sleep(1500 * attempt);
+            continue;
+        }
         if (res.ok) return json ? res.json() : Buffer.from(await res.arrayBuffer());
         if (res.status === 429 || res.status >= 500) { await sleep(1500 * attempt); continue; }
         throw new Error(`${res.status} for ${url}`);
@@ -54,16 +62,19 @@ async function main() {
     const games = [];
     for (const g of listed) {
         const d = details.get(g.id) || {};
+        const file = path.join(iconDir, `${g.id}.jpg`);
         let icon = null;
         if (icons.has(g.id)) {
             try {
                 // JPEG rather than WebP: some browsers (e.g. iOS Lockdown Mode) block WebP.
-                await fs.writeFile(path.join(iconDir, `${g.id}.jpg`), await get(icons.get(g.id), { json: false }));
+                await fs.writeFile(file, await get(icons.get(g.id), { json: false }));
                 icon = `assets/games/${g.id}.jpg`;
             } catch (err) {
                 console.warn(`icon for ${g.id}: ${err.message}`);
             }
         }
+        // Keep the icon we already have if this run couldn't get a new one.
+        if (!icon && await fs.access(file).then(() => true, () => false)) icon = `assets/games/${g.id}.jpg`;
         games.push({
             id: g.id,
             placeId: g.rootPlace?.id,
@@ -97,4 +108,7 @@ async function main() {
 
 main().catch(err => {
     console.warn(`Couldn't refresh Roblox data, keeping what's there: ${err.message}`);
+    // On the 6-hourly run, fail instead so the current deployment stays up
+    // (the committed snapshot is older than what's live). Pushes still deploy.
+    if (process.env.GITHUB_EVENT_NAME === 'schedule') process.exitCode = 1;
 });

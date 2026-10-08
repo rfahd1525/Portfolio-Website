@@ -377,6 +377,13 @@
     border-top: 1.5px dashed rgba(34, 26, 48, 0.25);
 }
 
+.rp-noicon {
+    width: 64px;
+    height: 64px;
+    border: 2px solid var(--r-ink);
+    background: #e6e0f0;
+}
+
 .rp-games img {
     width: 64px;
     height: 64px;

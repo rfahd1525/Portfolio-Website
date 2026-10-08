@@ -159,7 +159,8 @@ const warpEl = document.getElementById('warp');
 const warpCanvas = warpEl?.querySelector('.warp-lines');
 const warpStatus = warpEl?.querySelector('.warp-status');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const pageParts = [document.querySelector('.nav'), document.querySelector('main'), document.querySelector('.footer')];
+const pageParts = [document.querySelector('.skip'), document.querySelector('.nav'), document.querySelector('main'), document.querySelector('.footer')];
+const setPageInert = on => pageParts.forEach(el => el && (el.inert = on));
 
 let roomModule = null;
 let room = null;
@@ -259,6 +260,7 @@ async function enterRoom(trigger) {
     }
     roomState = 'entering';
     returnFocus = trigger || document.activeElement;
+    setPageInert(true);   // nothing underneath the loading screen should react
     const origin = originOf(trigger);
     const loading = loadRoomModule();
 
@@ -275,6 +277,7 @@ async function enterRoom(trigger) {
         roomEl.hidden = true;
         warpStatus.textContent = '';
         roomState = 'out';
+        setPageInert(false);
         await warpOut(origin);
         toast(`The 3D room couldn't start: ${err.message || err}`, 6000);
         if (location.hash === '#room') history.replaceState(null, '', location.pathname + location.search);
@@ -283,7 +286,6 @@ async function enterRoom(trigger) {
     warpStatus.textContent = '';
     roomEl.hidden = false;
     document.body.classList.add('in-room');
-    pageParts.forEach(el => el && (el.inert = true));
     room.start();
     if (location.hash !== '#room') { history.pushState({ room: true }, '', '#room'); pushedHash = true; }
     roomState = 'in';
@@ -299,7 +301,7 @@ async function leaveRoom({ fromHistory = false } = {}) {
     room.stop();
     roomEl.hidden = true;
     document.body.classList.remove('in-room');
-    pageParts.forEach(el => el && (el.inert = false));
+    setPageInert(false);
     if (!fromHistory) {
         if (pushedHash) history.back();
         else history.replaceState(null, '', location.pathname + location.search);
